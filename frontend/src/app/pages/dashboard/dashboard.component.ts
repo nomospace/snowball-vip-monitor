@@ -397,7 +397,7 @@ export class DashboardComponent implements OnInit {
   myVips: VIPUser[] = [];
   
   // 构建时间戳
-  buildTime = '2026-03-16 22:24';
+  buildTime = '2026-03-16 23:40';
   
   // 筛选状态
   selectedVipId: string | number = 'all';
