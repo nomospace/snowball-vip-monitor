@@ -2,10 +2,10 @@
 持仓监控 API
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from decimal import Decimal
@@ -22,7 +22,7 @@ class HoldingResponse(BaseModel):
     stock_code: str
     stock_name: str
     position: Decimal
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -34,10 +34,10 @@ class ChangeResponse(BaseModel):
     stock_code: str
     stock_name: str
     change_type: str
-    old_position: Decimal | None
-    new_position: Decimal | None
-    change_percent: Decimal | None
-    detected_at: datetime
+    old_position: Optional[Decimal] = None
+    new_position: Optional[Decimal] = None
+    change_percent: Optional[Decimal] = None
+    detected_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -59,8 +59,8 @@ async def get_vip_holdings(
 
 @router.get("/changes", response_model=List[ChangeResponse])
 async def get_holding_changes(
-    vip_id: int | None = None,
-    stock_code: str | None = None,
+    vip_id: Optional[int] = Query(None),
+    stock_code: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db)

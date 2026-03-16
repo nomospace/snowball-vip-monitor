@@ -2,27 +2,20 @@
 应用配置
 """
 
-from pydantic_settings import BaseSettings
+from pydantic import BaseSettings
 from typing import List
 
 
 class Settings(BaseSettings):
     # 应用配置
-    APP_NAME: str = "Snowball VIP Monitor"
+    APP_NAME: str = "mini脱水雪球"
     DEBUG: bool = True
     
     # 数据库配置
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/snowball_vip"
-    
-    # Redis 配置
-    REDIS_URL: str = "redis://localhost:6379/0"
-    
-    # Celery 配置
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./snowball_vip.db"
     
     # CORS 配置
-    CORS_ORIGINS: List[str] = ["http://localhost:4200", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:4200", "http://localhost:3000", "*"]
     
     # 雪球配置
     XUEQIU_BASE_URL: str = "https://xueqiu.com"

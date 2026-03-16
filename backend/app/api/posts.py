@@ -2,10 +2,10 @@
 动态监听 API
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -20,10 +20,10 @@ class PostResponse(BaseModel):
     vip_id: int
     post_id: str
     type: str
-    content: str | None
-    likes: int
-    comments: int
-    created_at: datetime | None
+    content: Optional[str] = None
+    likes: int = 0
+    comments: int = 0
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -31,8 +31,8 @@ class PostResponse(BaseModel):
 
 @router.get("", response_model=List[PostResponse])
 async def get_posts(
-    vip_id: int | None = None,
-    post_type: str | None = None,
+    vip_id: Optional[int] = Query(None),
+    post_type: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db)

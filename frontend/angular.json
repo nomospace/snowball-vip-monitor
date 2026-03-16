@@ -35,9 +35,16 @@
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
+          "options": {
+            "buildTarget": "snowball-vip:build",
+            "proxyConfig": "src/proxy.conf.json"
+          },
           "configurations": {
             "development": {
-              "buildTarget": "snowball-vip:build"
+              "buildTarget": "snowball-vip:build:development"
+            },
+            "production": {
+              "buildTarget": "snowball-vip:build:production"
             }
           }
         }

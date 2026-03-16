@@ -2,7 +2,7 @@
 数据库模型
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Decimal, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Numeric, ForeignKey, Enum
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
 import enum
@@ -33,13 +33,8 @@ class VIPUser(Base):
     avatar = Column(String(500))
     followers = Column(Integer, default=0)
     description = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # 关系
-    posts = relationship("VIPPost", back_populates="vip")
-    holdings = relationship("VIPHolding", back_populates="vip")
-    changes = relationship("HoldingChange", back_populates="vip")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
 
 
 class VIPPost(Base):
@@ -49,16 +44,13 @@ class VIPPost(Base):
     id = Column(Integer, primary_key=True, index=True)
     vip_id = Column(Integer, ForeignKey("vip_users.id"), nullable=False, index=True)
     post_id = Column(String(50), unique=True, nullable=False)
-    type = Column(Enum(PostType), default=PostType.post)
+    type = Column(String(20), default="post")
     content = Column(Text)
-    images = Column(Text)  # JSON 字符串
+    images = Column(Text)
     likes = Column(Integer, default=0)
     comments = Column(Integer, default=0)
-    created_at = Column(DateTime(timezone=True))  # 发布时间
-    crawled_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # 关系
-    vip = relationship("VIPUser", back_populates="posts")
+    created_at = Column(DateTime)
+    crawled_at = Column(DateTime, server_default=func.now())
 
 
 class VIPHolding(Base):
@@ -69,11 +61,8 @@ class VIPHolding(Base):
     vip_id = Column(Integer, ForeignKey("vip_users.id"), nullable=False, index=True)
     stock_code = Column(String(20), nullable=False, index=True)
     stock_name = Column(String(50), nullable=False)
-    position = Column(Decimal(5, 2), default=0)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # 关系
-    vip = relationship("VIPUser", back_populates="holdings")
+    position = Column(Numeric(5, 2), default=0)
+    updated_at = Column(DateTime, server_default=func.now())
 
 
 class HoldingChange(Base):
@@ -84,11 +73,8 @@ class HoldingChange(Base):
     vip_id = Column(Integer, ForeignKey("vip_users.id"), nullable=False, index=True)
     stock_code = Column(String(20), nullable=False, index=True)
     stock_name = Column(String(50))
-    change_type = Column(Enum(ChangeType), nullable=False)
-    old_position = Column(Decimal(5, 2))
-    new_position = Column(Decimal(5, 2))
-    change_percent = Column(Decimal(5, 2))
-    detected_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # 关系
-    vip = relationship("VIPUser", back_populates="changes")
+    change_type = Column(String(20), nullable=False)
+    old_position = Column(Numeric(5, 2))
+    new_position = Column(Numeric(5, 2))
+    change_percent = Column(Numeric(5, 2))
+    detected_at = Column(DateTime, server_default=func.now())
