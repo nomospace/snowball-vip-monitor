@@ -99,28 +99,6 @@ interface Analysis {
             </select>
           </div>
 
-          <!-- 数据类型 -->
-          <div class="bg-white rounded-lg shadow-sm p-4">
-            <h3 class="font-medium text-gray-700 mb-3">📊 数据类型</h3>
-            <div class="space-y-1">
-              <button 
-                (click)="dataType = 'all'; onFilterChange()"
-                [class]="dataType === 'all' ? 'w-full text-left px-3 py-2 rounded bg-blue-50 text-blue-600 text-sm' : 'w-full text-left px-3 py-2 rounded hover:bg-gray-50 text-gray-600 text-sm'">
-                全部动态
-              </button>
-              <button 
-                (click)="dataType = 'posts'; onFilterChange()"
-                [class]="dataType === 'posts' ? 'w-full text-left px-3 py-2 rounded bg-blue-50 text-blue-600 text-sm' : 'w-full text-left px-3 py-2 rounded hover:bg-gray-50 text-gray-600 text-sm'">
-                仅发言
-              </button>
-              <button 
-                (click)="dataType = 'trades'; onFilterChange()"
-                [class]="dataType === 'trades' ? 'w-full text-left px-3 py-2 rounded bg-blue-50 text-blue-600 text-sm' : 'w-full text-left px-3 py-2 rounded hover:bg-gray-50 text-gray-600 text-sm'">
-                仅交易
-              </button>
-            </div>
-          </div>
-
           <!-- 时间筛选 -->
           <div class="bg-white rounded-lg shadow-sm p-4">
             <h3 class="font-medium text-gray-700 mb-3">⏰ 时间范围</h3>
@@ -416,7 +394,6 @@ export class DashboardComponent implements OnInit {
   
   // 筛选状态
   selectedVipId: string | number = 'all';
-  dataType = 'all';
   timeRange = '7d';
   activeTab = 'timeline';
   
@@ -509,11 +486,6 @@ export class DashboardComponent implements OnInit {
     if (vipsToLoad.length === 0) {
       this.loading = false;
       return;
-    }
-
-    // 根据数据类型确定 status_type
-    if (this.dataType === 'trades') {
-      statusType = 11;
     }
 
     const allStatuses: Status[] = [];
