@@ -22,10 +22,6 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/vip-detail/vip-detail.component').then(m => m.VipDetailComponent)
   },
   {
-    path: 'posts',
-    loadComponent: () => import('./pages/post-list/post-list.component').then(m => m.PostListComponent)
-  },
-  {
     path: 'holdings',
     loadComponent: () => import('./pages/holding-list/holding-list.component').then(m => m.HoldingListComponent)
   }
