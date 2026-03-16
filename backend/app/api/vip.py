@@ -488,16 +488,42 @@ class FetchHoldingsRequest(BaseModel):
 class AnalyzeRequest(BaseModel):
     text: str
     title: str = ""
+    status_id: str = ""  # 动态ID，用于缓存
 
 
 @router.post("/analyze")
-async def analyze_content(data: AnalyzeRequest):
+async def analyze_content(
+    data: AnalyzeRequest,
+    db: AsyncSession = Depends(get_db)
+):
     """AI分析大V发言内容"""
     import httpx
     import os
+    import json
     
     if not data.text:
         return {"error": "内容为空"}
+    
+    # 如果有 status_id，先查询缓存
+    if data.status_id:
+        from app.models.models import StatusAnalysis
+        result = await db.execute(
+            select(StatusAnalysis).where(StatusAnalysis.status_id == data.status_id)
+        )
+        cached = result.scalar_one_or_none()
+        
+        if cached:
+            # 返回缓存的结果
+            return {
+                "coreViewpoint": cached.core_viewpoint,
+                "relatedStocks": json.loads(cached.related_stocks) if cached.related_stocks else [],
+                "positionSignals": json.loads(cached.position_signals) if cached.position_signals else [],
+                "keyLogic": json.loads(cached.key_logic) if cached.key_logic else [],
+                "riskWarnings": json.loads(cached.risk_warnings) if cached.risk_warnings else [],
+                "overallAttitude": cached.overall_attitude,
+                "summary": cached.summary,
+                "_cached": True
+            }
     
     # 检查 API Key
     api_key = os.environ.get("DASHSCOPE_API_KEY", "")
@@ -584,23 +610,51 @@ async def analyze_content(data: AnalyzeRequest):
                 
                 # 提取JSON部分
                 json_match = re.search(r'\{[\s\S]*\}', content)
+                analysis = {}
+                
                 if json_match:
                     try:
                         analysis = json.loads(json_match.group())
-                        return analysis
                     except:
-                        pass
+                        analysis = {
+                            "coreViewpoint": content[:200] if content else "分析完成",
+                            "relatedStocks": [],
+                            "positionSignals": [],
+                            "keyLogic": [],
+                            "riskWarnings": [],
+                            "overallAttitude": "中性",
+                            "summary": content[:100] if content else "AI 分析完成"
+                        }
+                else:
+                    analysis = {
+                        "coreViewpoint": content[:200] if content else "分析完成",
+                        "relatedStocks": [],
+                        "positionSignals": [],
+                        "keyLogic": [],
+                        "riskWarnings": [],
+                        "overallAttitude": "中性",
+                        "summary": content[:100] if content else "AI 分析完成"
+                    }
                 
-                # 如果无法解析JSON，返回原始内容
-                return {
-                    "coreViewpoint": content[:200] if content else "分析完成",
-                    "relatedStocks": [],
-                    "positionSignals": [],
-                    "keyLogic": [],
-                    "riskWarnings": [],
-                    "overallAttitude": "中性",
-                    "summary": content[:100] if content else "AI 分析完成"
-                }
+                # 保存到数据库
+                if data.status_id:
+                    from app.models.models import StatusAnalysis
+                    saved = StatusAnalysis(
+                        status_id=data.status_id,
+                        user_id="",  # 可以后续从上下文获取
+                        core_viewpoint=analysis.get("coreViewpoint", ""),
+                        related_stocks=json.dumps(analysis.get("relatedStocks", [])),
+                        position_signals=json.dumps(analysis.get("positionSignals", [])),
+                        key_logic=json.dumps(analysis.get("keyLogic", [])),
+                        risk_warnings=json.dumps(analysis.get("riskWarnings", [])),
+                        overall_attitude=analysis.get("overallAttitude", "中性"),
+                        summary=analysis.get("summary", ""),
+                        raw_content=data.text[:1000]
+                    )
+                    db.add(saved)
+                    await db.commit()
+                
+                return analysis
             else:
                 error_detail = response.text[:200] if response.text else "未知错误"
                 return {"error": f"AI分析失败 ({response.status_code}): {error_detail}"}

@@ -78,3 +78,21 @@ class HoldingChange(Base):
     new_position = Column(Numeric(5, 2))
     change_percent = Column(Numeric(5, 2))
     detected_at = Column(DateTime, server_default=func.now())
+
+
+class StatusAnalysis(Base):
+    """动态分析表（脱水解读）"""
+    __tablename__ = "status_analyses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status_id = Column(String(50), unique=True, nullable=False, index=True)
+    user_id = Column(String(50), index=True)
+    core_viewpoint = Column(Text)  # 核心观点
+    related_stocks = Column(Text)  # 相关股票 (JSON)
+    position_signals = Column(Text)  # 持仓信号 (JSON)
+    key_logic = Column(Text)  # 关键逻辑 (JSON)
+    risk_warnings = Column(Text)  # 风险提示 (JSON)
+    overall_attitude = Column(String(20))  # 整体态度
+    summary = Column(Text)  # 脱水总结
+    raw_content = Column(Text)  # 原始内容
+    created_at = Column(DateTime, server_default=func.now())

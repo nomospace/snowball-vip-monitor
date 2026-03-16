@@ -646,7 +646,8 @@ export class DashboardComponent implements OnInit {
     
     this.http.post<Analysis>('/api/vip/analyze', {
       text: status.text,
-      title: status.title
+      title: status.title,
+      status_id: status.id  // 传递状态ID用于缓存
     }).subscribe({
       next: (result) => {
         this.analyses.set(status.id, result);
