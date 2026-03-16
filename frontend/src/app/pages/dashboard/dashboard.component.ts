@@ -19,7 +19,7 @@ interface TaskStatus {
   template: `
     <div class="space-y-6">
       <div class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold text-gray-800">📊 mini脱水雪球</h1>
+        <h1 class="text-3xl font-bold text-gray-800">📊 雪球大V追踪器</h1>
         <div class="flex items-center gap-4">
           <div class="text-sm text-gray-500">
             任务状态: 
