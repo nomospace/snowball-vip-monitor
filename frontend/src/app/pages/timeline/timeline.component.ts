@@ -1,24 +1,36 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { VipService, VIPUser, Status } from '../../services/vip.service';
 
 @Component({
   selector: 'app-timeline',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   template: `
-    <div class="space-y-6">
-      <div class="flex justify-between items-center">
-        <h1 class="text-2xl font-bold">📅 动态时间线</h1>
-        <button 
-          (click)="refresh()"
-          [disabled]="loading"
-          class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 transition">
-          {{ loading ? '加载中...' : '刷新' }}
-        </button>
-      </div>
+    <div class="min-h-screen bg-gray-50">
+      <!-- 顶部标题栏 -->
+      <header class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <a routerLink="/" class="text-gray-400 hover:text-gray-600 text-sm flex items-center gap-1">
+              <span>←</span>
+              <span>返回首页</span>
+            </a>
+            <span class="text-gray-300">|</span>
+            <h1 class="text-2xl font-bold">📅 动态时间线</h1>
+          </div>
+          <button 
+            (click)="refresh()"
+            [disabled]="loading"
+            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 transition">
+            {{ loading ? '加载中...' : '刷新' }}
+          </button>
+        </div>
+      </header>
 
-      @if (loading) {
+      <div class="max-w-7xl mx-auto p-4">
+        @if (loading) {
         <div class="text-center py-12">
           <div class="text-gray-400 text-lg">加载中...</div>
         </div>
@@ -66,6 +78,7 @@ import { VipService, VIPUser, Status } from '../../services/vip.service';
           }
         </div>
       }
+      </div>
     </div>
   `
 })

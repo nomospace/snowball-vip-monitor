@@ -20,7 +20,22 @@ export class RichTextPipe implements PipeTransform {
   standalone: true,
   imports: [CommonModule, RichTextPipe],
   template: `
-    <div class="space-y-6">
+    <div class="min-h-screen bg-gray-50">
+      <!-- 顶部导航 -->
+      <header class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center gap-4">
+          <a routerLink="/" class="text-gray-400 hover:text-gray-600 text-sm flex items-center gap-1">
+            <span>←</span>
+            <span>返回首页</span>
+          </a>
+          <span class="text-gray-300">|</span>
+          <a routerLink="/vip" class="text-gray-400 hover:text-gray-600 text-sm">
+            大V列表
+          </a>
+        </div>
+      </header>
+
+      <div class="max-w-7xl mx-auto p-4 space-y-6">
       <!-- 加载状态 -->
       @if (loading) {
         <div class="text-center py-12">

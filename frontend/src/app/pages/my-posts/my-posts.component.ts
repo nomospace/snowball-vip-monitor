@@ -29,7 +29,20 @@ interface MyStatus {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="space-y-6">
+    <div class="min-h-screen bg-gray-50">
+      <!-- 顶部标题栏 -->
+      <header class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center gap-4">
+          <a routerLink="/" class="text-gray-400 hover:text-gray-600 text-sm flex items-center gap-1">
+            <span>←</span>
+            <span>返回首页</span>
+          </a>
+          <span class="text-gray-300">|</span>
+          <h1 class="text-xl font-bold text-gray-800">📝 我的帖子</h1>
+        </div>
+      </header>
+
+      <div class="max-w-7xl mx-auto p-4 space-y-6">
       <!-- 用户信息 -->
       @if (myInfo) {
         <div class="bg-white p-6 rounded-lg shadow">

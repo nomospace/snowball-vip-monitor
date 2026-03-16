@@ -31,7 +31,14 @@ interface HotStock {
       <!-- 顶部标题栏 -->
       <header class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 class="text-xl font-bold text-gray-800">📈 持仓变更 - 大V调仓追踪</h1>
+          <div class="flex items-center gap-4">
+            <a routerLink="/" class="text-gray-400 hover:text-gray-600 text-sm flex items-center gap-1">
+              <span>←</span>
+              <span>返回首页</span>
+            </a>
+            <span class="text-gray-300">|</span>
+            <h1 class="text-xl font-bold text-gray-800">📈 持仓变更 - 大V调仓追踪</h1>
+          </div>
           <div class="flex items-center gap-4">
             <select 
               [(ngModel)]="timeRange"
