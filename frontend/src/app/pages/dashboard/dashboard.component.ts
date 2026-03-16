@@ -254,6 +254,9 @@ interface HoldingChange {
           <div class="text-center text-xs text-gray-400 py-2">
             最后更新: {{ lastUpdate }} | 数据来源于雪球，仅供参考
           </div>
+          <div class="text-center text-xs text-gray-300 py-1">
+            Build: {{ buildTime }}
+          </div>
         </main>
       </div>
     </div>
@@ -322,6 +325,9 @@ interface HoldingChange {
 })
 export class DashboardComponent implements OnInit {
   myVips: VIPUser[] = [];
+  
+  // 构建时间戳
+  buildTime = '2026-03-16 22:24';
   
   // 筛选状态
   selectedVipId: string | number = 'all';
