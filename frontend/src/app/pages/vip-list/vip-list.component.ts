@@ -1,206 +1,262 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { VipService, VIPUser } from '../../services/vip.service';
+
+interface VIPUser {
+  id: number;
+  xueqiu_id: string;
+  nickname: string;
+  avatar: string | null;
+  followers: number;
+  description: string | null;
+}
+
+// 预设热门大V
+const PRESET_VIPS = [
+  { xueqiu_id: '1247347543', nickname: '方三文', category: '价值投资', followers: 1200000 },
+  { xueqiu_id: '1178668715', nickname: '不明真相的群众', category: '价值投资', followers: 850000 },
+  { xueqiu_id: '2292705444', nickname: '省心省力啊', category: '综合', followers: 150000 },
+  { xueqiu_id: '1233631554', nickname: '价值at风险', category: '价值投资', followers: 280000 },
+  { xueqiu_id: '6876843497', nickname: '省心省力啊', category: '综合', followers: 120000 },
+];
+
+const CATEGORIES = ['全部', '价值投资', '科技', '消费', '新能源', '医药', '综合'];
 
 @Component({
   selector: 'app-vip-list',
   standalone: true,
   imports: [CommonModule, RouterLink, FormsModule],
-  providers: [],
   template: `
-    <div class="space-y-6">
-      <div class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold text-gray-800">👤 大V列表</h1>
-        <button 
-          (click)="showAddModal = true" 
-          class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
-          + 添加大V
-        </button>
-      </div>
-
-      <!-- 空状态 -->
-      @if (vips.length === 0 && !loading) {
-        <div class="text-center py-12 bg-white rounded-lg shadow">
-          <div class="text-gray-400 text-6xl mb-4">👤</div>
-          <p class="text-gray-500 text-lg">暂无大V，点击右上角添加</p>
+    <div class="min-h-screen bg-gray-50">
+      <!-- 顶部标题栏 -->
+      <header class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+          <h1 class="text-xl font-bold text-gray-800">👥 大V管理</h1>
+          <button 
+            (click)="showAddModal = true"
+            class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+            + 添加大V
+          </button>
         </div>
-      }
+      </header>
 
-      <!-- 加载状态 -->
-      @if (loading) {
-        <div class="text-center py-12">
-          <div class="text-gray-400 text-lg">加载中...</div>
-        </div>
-      }
-
-      <!-- 大V列表 -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        @for (vip of vips; track vip.id) {
-          <a [routerLink]="['/vip', vip.id]" class="bg-white p-6 rounded-lg shadow hover:shadow-lg transition cursor-pointer block relative group">
-            <button 
-              (click)="deleteVip($event, vip.id)" 
-              class="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1">
-              ✕
-            </button>
-            <div class="flex items-center gap-4">
-              <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-2xl overflow-hidden">
-                @if (vip.avatar) {
-                  <img [src]="vip.avatar" [alt]="vip.nickname" class="w-full h-full object-cover">
-                } @else {
-                  👤
-                }
-              </div>
-              <div class="flex-1">
-                <div class="font-bold text-lg">{{ vip.nickname }}</div>
-                <div class="text-gray-500 text-sm">{{ formatFollowers(vip.followers) }} 粉丝</div>
-              </div>
-            </div>
-            <div class="mt-4 text-gray-600 text-sm line-clamp-2">{{ vip.description || '暂无简介' }}</div>
-          </a>
-        }
-      </div>
-
-      <!-- 添加大V弹窗 -->
-      @if (showAddModal) {
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" (click)="showAddModal = false">
-          <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4" (click)="$event.stopPropagation()">
-            <h2 class="text-xl font-bold mb-4">添加大V</h2>
-            
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">雪球用户ID <span class="text-red-500">*</span></label>
-                <input 
-                  type="text" 
-                  [(ngModel)]="newXueqiuId"
-                  placeholder="输入雪球用户ID，如: 1234567890"
-                  class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                <p class="text-xs text-gray-500 mt-1">可在雪球用户主页URL中找到ID</p>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">昵称</label>
-                <input 
-                  type="text" 
-                  [(ngModel)]="newNickname"
-                  placeholder="输入大V昵称（可选）"
-                  class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">粉丝数</label>
-                <input 
-                  type="number" 
-                  [(ngModel)]="newFollowers"
-                  placeholder="输入粉丝数（可选）"
-                  class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-              </div>
-              
-              @if (addError) {
-                <p class="text-red-500 text-sm">{{ addError }}</p>
-              }
-              
-              <div class="flex gap-3 justify-end">
-                <button 
-                  (click)="showAddModal = false"
-                  class="px-4 py-2 text-gray-600 hover:text-gray-800 transition">
-                  取消
-                </button>
-                <button 
-                  (click)="addVip()"
-                  [disabled]="adding || !newXueqiuId.trim()"
-                  class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                  {{ adding ? '添加中...' : '添加' }}
-                </button>
-              </div>
-            </div>
+      <div class="max-w-7xl mx-auto p-4">
+        <!-- 分类筛选 -->
+        <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <div class="flex gap-2 flex-wrap">
+            @for (cat of categories; track cat) {
+              <button 
+                (click)="selectedCategory = cat"
+                [class]="selectedCategory === cat ? 'px-4 py-1.5 rounded-full bg-blue-600 text-white text-sm' : 'px-4 py-1.5 rounded-full bg-gray-100 text-gray-600 text-sm hover:bg-gray-200'">
+                {{ cat }}
+              </button>
+            }
           </div>
         </div>
-      }
+
+        <!-- 已关注大V -->
+        <div class="bg-white rounded-lg shadow-sm mb-6">
+          <div class="p-4 border-b border-gray-100">
+            <h2 class="font-medium text-gray-700">已关注 ({{ myVips.length }})</h2>
+          </div>
+          
+          @if (loading) {
+            <div class="p-8 text-center text-gray-400">加载中...</div>
+          } @else if (myVips.length === 0) {
+            <div class="p-8 text-center text-gray-400">
+              <p>暂无关注的大V</p>
+              <p class="text-sm mt-2">从下方热门大V库添加，或手动输入雪球ID</p>
+            </div>
+          } @else {
+            <div class="divide-y divide-gray-50">
+              @for (vip of myVips; track vip.id) {
+                <div class="p-4 hover:bg-gray-50 transition">
+                  <div class="flex items-center justify-between">
+                    <a [routerLink]="['/vip', vip.id]" class="flex items-center gap-3 flex-1">
+                      <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-lg">
+                        👤
+                      </div>
+                      <div>
+                        <div class="font-medium text-gray-800">{{ vip.nickname }}</div>
+                        <div class="text-sm text-gray-500">{{ vip.followers | number }} 粉丝</div>
+                      </div>
+                    </a>
+                    <button 
+                      (click)="removeVip(vip.id)"
+                      class="text-sm text-red-500 hover:text-red-600">
+                      取消关注
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- 热门大V库 -->
+        <div class="bg-white rounded-lg shadow-sm">
+          <div class="p-4 border-b border-gray-100">
+            <h2 class="font-medium text-gray-700">🔥 热门大V库</h2>
+            <p class="text-xs text-gray-400 mt-1">一键添加雪球热门投资者</p>
+          </div>
+          
+          <div class="divide-y divide-gray-50">
+            @for (vip of presetVips; track vip.xueqiu_id) {
+              <div class="p-4 hover:bg-gray-50 transition">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-lg">
+                      👤
+                    </div>
+                    <div>
+                      <div class="font-medium text-gray-800">{{ vip.nickname }}</div>
+                      <div class="text-sm text-gray-500">
+                        {{ vip.followers | number }} 粉丝 · {{ vip.category }}
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    (click)="addPresetVip(vip)"
+                    [disabled]="isAdded(vip.xueqiu_id)"
+                    [class]="isAdded(vip.xueqiu_id) ? 'text-sm text-gray-400' : 'text-sm text-blue-500 hover:text-blue-600'">
+                    {{ isAdded(vip.xueqiu_id) ? '已关注' : '+ 关注' }}
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- 添加大V弹窗 -->
+    @if (showAddModal) {
+      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" (click)="showAddModal = false">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md" (click)="$event.stopPropagation()">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">添加大V</h3>
+            <button (click)="showAddModal = false" class="text-gray-400 hover:text-gray-600">✕</button>
+          </div>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-600 mb-1">雪球用户ID</label>
+              <input 
+                type="text" 
+                [(ngModel)]="newVipId"
+                placeholder="例如: 1247347543"
+                class="w-full border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <p class="text-xs text-gray-400 mt-1">可在雪球用户主页URL中找到</p>
+            </div>
+            
+            <div>
+              <label class="block text-sm text-gray-600 mb-1">昵称（可选）</label>
+              <input 
+                type="text" 
+                [(ngModel)]="newVipName"
+                placeholder="留空将自动获取"
+                class="w-full border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
+            
+            <button 
+              (click)="addVip()"
+              [disabled]="adding || !newVipId.trim()"
+              class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {{ adding ? '添加中...' : '添加' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `
 })
 export class VipListComponent implements OnInit {
-  vips: VIPUser[] = [];
+  myVips: VIPUser[] = [];
+  presetVips = PRESET_VIPS;
+  categories = CATEGORIES;
+  selectedCategory = '全部';
   loading = false;
+  
   showAddModal = false;
-  newXueqiuId = '';
-  newNickname = '';
-  newFollowers: number | null = null;
+  newVipId = '';
+  newVipName = '';
   adding = false;
-  addError = '';
 
-  constructor(private vipService: VipService) {}
+  constructor(private http: HttpClient) {}
 
   ngOnInit() {
-    this.loadVips();
+    this.loadMyVips();
   }
 
-  loadVips() {
+  loadMyVips() {
     this.loading = true;
-    this.vipService.getVipList().subscribe({
-      next: (data) => {
-        this.vips = data;
+    this.http.get<VIPUser[]>('/api/vip').subscribe({
+      next: (vips) => {
+        this.myVips = vips;
         this.loading = false;
       },
-      error: (err) => {
-        console.error('加载大V列表失败', err);
+      error: () => {
         this.loading = false;
+      }
+    });
+  }
+
+  isAdded(xueqiuId: string): boolean {
+    return this.myVips.some(v => v.xueqiu_id === xueqiuId);
+  }
+
+  addPresetVip(vip: typeof PRESET_VIPS[0]) {
+    if (this.isAdded(vip.xueqiu_id)) return;
+    
+    this.http.post<VIPUser>('/api/vip', {
+      xueqiu_id: vip.xueqiu_id,
+      nickname: vip.nickname,
+      followers: vip.followers
+    }).subscribe({
+      next: (newVip) => {
+        this.myVips.push(newVip);
+      },
+      error: (err) => {
+        alert('添加失败: ' + (err.error?.detail || err.message));
       }
     });
   }
 
   addVip() {
-    if (!this.newXueqiuId.trim()) return;
+    if (!this.newVipId.trim()) return;
     
     this.adding = true;
-    this.addError = '';
     
-    this.vipService.addVip(
-      this.newXueqiuId.trim(), 
-      this.newNickname.trim() || undefined,
-      this.newFollowers || undefined
-    ).subscribe({
+    this.http.post<VIPUser>('/api/vip', {
+      xueqiu_id: this.newVipId.trim(),
+      nickname: this.newVipName.trim() || null
+    }).subscribe({
       next: (vip) => {
-        this.vips.unshift(vip);
+        this.myVips.push(vip);
         this.showAddModal = false;
-        this.newXueqiuId = '';
-        this.newNickname = '';
-        this.newFollowers = null;
+        this.newVipId = '';
+        this.newVipName = '';
         this.adding = false;
       },
       error: (err) => {
-        this.addError = err.error?.detail || '添加失败，请检查用户ID';
         this.adding = false;
+        alert('添加失败: ' + (err.error?.detail || err.message));
       }
     });
   }
 
-  deleteVip(event: Event, id: number) {
-    event.preventDefault();
-    event.stopPropagation();
+  removeVip(vipId: number) {
+    if (!confirm('确定要取消关注吗？')) return;
     
-    if (!confirm('确定要删除这个大V吗？')) return;
-    
-    this.vipService.deleteVip(id).subscribe({
+    this.http.delete(`/api/vip/${vipId}`).subscribe({
       next: () => {
-        this.vips = this.vips.filter(v => v.id !== id);
+        this.myVips = this.myVips.filter(v => v.id !== vipId);
       },
-      error: (err) => {
-        console.error('删除失败', err);
-        alert('删除失败');
+      error: () => {
+        alert('操作失败');
       }
     });
-  }
-
-  formatFollowers(count: number): string {
-    if (count >= 10000) {
-      return (count / 10000).toFixed(1) + '万';
-    }
-    return count.toString();
   }
 }
