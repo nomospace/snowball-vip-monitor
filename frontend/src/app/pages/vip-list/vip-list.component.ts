@@ -13,15 +13,6 @@ interface VIPUser {
   description: string | null;
 }
 
-// 预设热门大V
-const PRESET_VIPS = [
-  { xueqiu_id: '1247347543', nickname: '方三文', followers: 1200000 },
-  { xueqiu_id: '1178668715', nickname: '不明真相的群众', followers: 850000 },
-  { xueqiu_id: '2292705444', nickname: '省心省力啊', followers: 150000 },
-  { xueqiu_id: '1233631554', nickname: '价值at风险', followers: 280000 },
-  { xueqiu_id: '6876843497', nickname: '省心省力啊', followers: 120000 },
-];
-
 @Component({
   selector: 'app-vip-list',
   standalone: true,
@@ -59,7 +50,7 @@ const PRESET_VIPS = [
           } @else if (myVips.length === 0) {
             <div class="p-8 text-center text-gray-400">
               <p>暂无关注的大V</p>
-              <p class="text-sm mt-2">从下方热门大V库添加，或手动输入雪球ID</p>
+              <p class="text-sm mt-2">点击右上角"添加大V"按钮，输入雪球用户ID</p>
             </div>
           } @else {
             <div class="divide-y divide-gray-50">
@@ -85,40 +76,6 @@ const PRESET_VIPS = [
               }
             </div>
           }
-        </div>
-
-        <!-- 热门大V库 -->
-        <div class="bg-white rounded-lg shadow-sm">
-          <div class="p-4 border-b border-gray-100">
-            <h2 class="font-medium text-gray-700">🔥 热门大V库</h2>
-            <p class="text-xs text-gray-400 mt-1">一键添加雪球热门投资者</p>
-          </div>
-          
-          <div class="divide-y divide-gray-50">
-            @for (vip of presetVips; track vip.xueqiu_id) {
-              <div class="p-4 hover:bg-gray-50 transition">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-lg">
-                      👤
-                    </div>
-                    <div>
-                      <div class="font-medium text-gray-800">{{ vip.nickname }}</div>
-                      <div class="text-sm text-gray-500">
-                        {{ vip.followers | number }} 粉丝
-                      </div>
-                    </div>
-                  </div>
-                  <button 
-                    (click)="addPresetVip(vip)"
-                    [disabled]="isAdded(vip.xueqiu_id)"
-                    [class]="isAdded(vip.xueqiu_id) ? 'text-sm text-gray-400' : 'text-sm text-blue-500 hover:text-blue-600'">
-                    {{ isAdded(vip.xueqiu_id) ? '已关注' : '+ 关注' }}
-                  </button>
-                </div>
-              </div>
-            }
-          </div>
         </div>
       </div>
     </div>
@@ -166,7 +123,6 @@ const PRESET_VIPS = [
 })
 export class VipListComponent implements OnInit {
   myVips: VIPUser[] = [];
-  presetVips = PRESET_VIPS;
   loading = false;
   
   showAddModal = false;
@@ -189,30 +145,6 @@ export class VipListComponent implements OnInit {
       },
       error: () => {
         this.loading = false;
-      }
-    });
-  }
-
-  isAdded(xueqiuId: string): boolean {
-    return this.myVips.some(v => v.xueqiu_id === xueqiuId);
-  }
-
-  addPresetVip(vip: typeof PRESET_VIPS[0]) {
-    if (this.isAdded(vip.xueqiu_id)) return;
-    
-    const cookie = localStorage.getItem('xueqiu_cookie') || '';
-    
-    this.http.post<VIPUser>('/api/vip', {
-      xueqiu_id: vip.xueqiu_id,
-      nickname: vip.nickname,
-      followers: vip.followers,
-      cookie: cookie
-    }).subscribe({
-      next: (newVip) => {
-        this.myVips.push(newVip);
-      },
-      error: (err) => {
-        alert('添加失败: ' + (err.error?.detail || err.message));
       }
     });
   }
