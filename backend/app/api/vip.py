@@ -255,6 +255,61 @@ async def delete_vip(
 
 # ============ 动态相关 ============
 
+class FetchStatusesRequest(BaseModel):
+    user_id: str
+    status_type: int = 0
+    count: int = 10
+    cookie: str = ""
+
+
+@router.post("/fetch-statuses")
+async def fetch_statuses(data: FetchStatusesRequest):
+    """获取用户动态（使用前端提供的Cookie）"""
+    import os
+    import tempfile
+    
+    # 临时保存前端提供的Cookie
+    cookie_file = os.path.expanduser("~/.xueqiu_cookie_temp")
+    
+    try:
+        # 如果前端提供了Cookie，临时使用
+        if data.cookie:
+            with open(cookie_file, "w") as f:
+                f.write(data.cookie)
+            
+            # 临时修改环境
+            original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
+            if os.path.exists(original_cookie_file):
+                os.rename(original_cookie_file, original_cookie_file + ".bak")
+            os.rename(cookie_file, original_cookie_file)
+        
+        from app.services.xueqiu_service import XueqiuService
+        service = XueqiuService()
+        statuses = service.get_user_statuses(data.user_id, data.status_type, data.count)
+        
+        return [
+            {
+                "id": s.id,
+                "user_id": s.user_id,
+                "text": s.text,
+                "title": s.title,
+                "link": s.link,
+                "created_at": s.created_at,
+                "retweet_count": s.retweet_count,
+                "reply_count": s.reply_count,
+                "like_count": s.like_count,
+            }
+            for s in statuses
+        ]
+    finally:
+        # 恢复原始Cookie文件
+        original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
+        if os.path.exists(original_cookie_file + ".bak"):
+            if os.path.exists(original_cookie_file):
+                os.remove(original_cookie_file)
+            os.rename(original_cookie_file + ".bak", original_cookie_file)
+
+
 @router.get("/{vip_id}/statuses")
 async def get_vip_statuses(
     vip_id: int,

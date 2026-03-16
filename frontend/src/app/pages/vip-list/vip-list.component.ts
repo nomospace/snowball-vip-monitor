@@ -15,14 +15,12 @@ interface VIPUser {
 
 // 预设热门大V
 const PRESET_VIPS = [
-  { xueqiu_id: '1247347543', nickname: '方三文', category: '价值投资', followers: 1200000 },
-  { xueqiu_id: '1178668715', nickname: '不明真相的群众', category: '价值投资', followers: 850000 },
-  { xueqiu_id: '2292705444', nickname: '省心省力啊', category: '综合', followers: 150000 },
-  { xueqiu_id: '1233631554', nickname: '价值at风险', category: '价值投资', followers: 280000 },
-  { xueqiu_id: '6876843497', nickname: '省心省力啊', category: '综合', followers: 120000 },
+  { xueqiu_id: '1247347543', nickname: '方三文', followers: 1200000 },
+  { xueqiu_id: '1178668715', nickname: '不明真相的群众', followers: 850000 },
+  { xueqiu_id: '2292705444', nickname: '省心省力啊', followers: 150000 },
+  { xueqiu_id: '1233631554', nickname: '价值at风险', followers: 280000 },
+  { xueqiu_id: '6876843497', nickname: '省心省力啊', followers: 120000 },
 ];
-
-const CATEGORIES = ['全部', '价值投资', '科技', '消费', '新能源', '医药', '综合'];
 
 @Component({
   selector: 'app-vip-list',
@@ -43,19 +41,6 @@ const CATEGORIES = ['全部', '价值投资', '科技', '消费', '新能源', '
       </header>
 
       <div class="max-w-7xl mx-auto p-4">
-        <!-- 分类筛选 -->
-        <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-          <div class="flex gap-2 flex-wrap">
-            @for (cat of categories; track cat) {
-              <button 
-                (click)="selectedCategory = cat"
-                [class]="selectedCategory === cat ? 'px-4 py-1.5 rounded-full bg-blue-600 text-white text-sm' : 'px-4 py-1.5 rounded-full bg-gray-100 text-gray-600 text-sm hover:bg-gray-200'">
-                {{ cat }}
-              </button>
-            }
-          </div>
-        </div>
-
         <!-- 已关注大V -->
         <div class="bg-white rounded-lg shadow-sm mb-6">
           <div class="p-4 border-b border-gray-100">
@@ -113,7 +98,7 @@ const CATEGORIES = ['全部', '价值投资', '科技', '消费', '新能源', '
                     <div>
                       <div class="font-medium text-gray-800">{{ vip.nickname }}</div>
                       <div class="text-sm text-gray-500">
-                        {{ vip.followers | number }} 粉丝 · {{ vip.category }}
+                        {{ vip.followers | number }} 粉丝
                       </div>
                     </div>
                   </div>
@@ -175,8 +160,6 @@ const CATEGORIES = ['全部', '价值投资', '科技', '消费', '新能源', '
 export class VipListComponent implements OnInit {
   myVips: VIPUser[] = [];
   presetVips = PRESET_VIPS;
-  categories = CATEGORIES;
-  selectedCategory = '全部';
   loading = false;
   
   showAddModal = false;
