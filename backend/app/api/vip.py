@@ -1,5 +1,5 @@
 """
-mini脱水雪球 - 大V管理 API
+脱水雪球 - 大V管理 API
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -19,8 +19,12 @@ router = APIRouter()
 
 class VIPCreate(BaseModel):
     xueqiu_id: str
-    nickname: Optional[str] = None  # 可选手动输入
+    nickname: Optional[str] = None
     followers: Optional[int] = 0
+
+
+class CookieInput(BaseModel):
+    cookie: str
 
 
 class VIPResponse(BaseModel):
@@ -32,14 +36,16 @@ class VIPResponse(BaseModel):
     description: Optional[str] = None
 
     class Config:
-        orm_mode = True  # Pydantic v1 兼容
+        orm_mode = True
 
 
 class StatusResponse(BaseModel):
     id: str
+    user_id: str
     text: str
     title: str
-    created_at: int
+    link: str
+    created_at: str
     retweet_count: int
     reply_count: int
     like_count: int
@@ -60,7 +66,7 @@ class RebalancingResponse(BaseModel):
     holdings: List[dict]
 
 
-# ============ Cookie 检查 ============
+# ============ Cookie 管理 ============
 
 @router.get("/check-cookie")
 async def check_cookie():
@@ -70,28 +76,17 @@ async def check_cookie():
     return {"has_cookie": has_cookie}
 
 
-class CookieInput(BaseModel):
-    cookie: str
-
-
 @router.post("/cookie")
 async def save_cookie(data: CookieInput):
     """保存 Cookie"""
     cookie_file = os.path.expanduser("~/.xueqiu_cookie")
-    with open(cookie_file, "w") as f:
-        f.write(data.cookie)
-    os.chmod(cookie_file, 0o600)
-    return {"message": "Cookie 保存成功"}
-
-
-# ============ 大V管理 ============
-
-
-class RebalancingResponse(BaseModel):
-    cube_id: str
-    rebalancing_id: str
-    created_at: int
-    holdings: List[dict]
+    try:
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(data.cookie)
+        os.chmod(cookie_file, 0o600)
+        return {"message": "Cookie 保存成功"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
 
 
 # ============ 大V管理 ============
@@ -114,10 +109,7 @@ async def add_vip(
     vip_data: VIPCreate,
     db: AsyncSession = Depends(get_db)
 ):
-    """添加大V
-    
-    自动爬取用户信息（如果失败则使用手动输入或默认值）
-    """
+    """添加大V"""
     # 检查是否已存在
     result = await db.execute(
         select(VIPUser).where(VIPUser.xueqiu_id == vip_data.xueqiu_id)
@@ -138,7 +130,6 @@ async def add_vip(
         
         if crawl_result.get("success") and crawl_result.get("user_info"):
             user_info = crawl_result["user_info"]
-            # 爬取成功则使用爬取的数据（除非手动指定）
             if not vip_data.nickname:
                 nickname = user_info.get("screen_name") or nickname
             if not vip_data.followers:
@@ -203,20 +194,14 @@ async def delete_vip(
 
 # ============ 动态相关 ============
 
-@router.get("/{vip_id}/statuses", response_model=List[StatusResponse])
+@router.get("/{vip_id}/statuses")
 async def get_vip_statuses(
     vip_id: int,
-    status_type: int = Query(0, description="动态类型: 0=原发布, 2=长文, 11=交易"),
+    status_type: int = Query(0, description="动态类型: 0=原发布, 11=交易"),
     count: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取大V动态
-    
-    动态类型：
-    - 0: 原发布（原创文章、评论等）
-    - 2: 长文
-    - 11: 交易（股票买卖记录）
-    """
+    """获取大V动态"""
     result = await db.execute(
         select(VIPUser).where(VIPUser.id == vip_id)
     )
@@ -227,36 +212,28 @@ async def get_vip_statuses(
     
     # 实时爬取
     from app.services.xueqiu_service import XueqiuService
-    import asyncio
+    service = XueqiuService()
+    statuses = service.get_user_statuses(vip.xueqiu_id, status_type, count)
     
-    async def fetch():
-        service = XueqiuService()
-        try:
-            await service.init_browser()
-            statuses = await service.get_user_statuses(vip.xueqiu_id, status_type, count)
-            await service.close()
-            return statuses
-        except Exception as e:
-            await service.close()
-            raise e
-    
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                statuses = pool.submit(asyncio.run, fetch()).result()
-        else:
-            statuses = loop.run_until_complete(fetch())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"爬取动态失败: {e}")
-    
-    return [s.__dict__ for s in statuses]
+    return [
+        {
+            "id": s.id,
+            "user_id": s.user_id,
+            "text": s.text,
+            "title": s.title,
+            "link": s.link,
+            "created_at": s.created_at,
+            "retweet_count": s.retweet_count,
+            "reply_count": s.reply_count,
+            "like_count": s.like_count,
+        }
+        for s in statuses
+    ]
 
 
 # ============ 组合相关 ============
 
-@router.get("/{vip_id}/portfolios", response_model=List[PortfolioResponse])
+@router.get("/{vip_id}/portfolios")
 async def get_vip_portfolios(
     vip_id: int,
     db: AsyncSession = Depends(get_db)
@@ -272,46 +249,29 @@ async def get_vip_portfolios(
     
     # 实时爬取
     from app.services.xueqiu_service import XueqiuService
-    import asyncio
+    service = XueqiuService()
+    portfolios = service.get_user_portfolios(vip.xueqiu_id)
     
-    async def fetch():
-        service = XueqiuService()
-        try:
-            await service.init_browser()
-            portfolios = await service.get_user_portfolios(vip.xueqiu_id)
-            await service.close()
-            return portfolios
-        except Exception as e:
-            await service.close()
-            raise e
-    
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                portfolios = pool.submit(asyncio.run, fetch()).result()
-        else:
-            portfolios = loop.run_until_complete(fetch())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"爬取组合失败: {e}")
-    
-    return [p.__dict__ for p in portfolios]
+    return [
+        {
+            "cube_id": p.cube_id,
+            "name": p.name,
+            "symbol": p.symbol,
+            "net_value": p.net_value,
+            "total_gain": p.total_gain,
+        }
+        for p in portfolios
+    ]
 
 
-@router.get("/{vip_id}/rebalancing/{cube_symbol}", response_model=List[RebalancingResponse])
+@router.get("/{vip_id}/rebalancing/{cube_id}")
 async def get_vip_rebalancing(
     vip_id: int,
-    cube_symbol: str,
+    cube_id: str,
     count: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取组合调仓历史
-    
-    返回调仓记录，包含：
-    - 调仓时间
-    - 变动明细（买入/卖出股票）
-    """
+    """获取组合调仓历史"""
     result = await db.execute(
         select(VIPUser).where(VIPUser.id == vip_id)
     )
@@ -322,28 +282,16 @@ async def get_vip_rebalancing(
     
     # 实时爬取
     from app.services.xueqiu_service import XueqiuService
-    import asyncio
+    service = XueqiuService()
+    rebalancings = service.get_portfolio_rebalancing(cube_id, count)
     
-    async def fetch():
-        service = XueqiuService()
-        try:
-            await service.init_browser()
-            rebalancings = await service.get_portfolio_rebalancing(cube_symbol, count)
-            await service.close()
-            return rebalancings
-        except Exception as e:
-            await service.close()
-            raise e
-    
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                rebalancings = pool.submit(asyncio.run, fetch()).result()
-        else:
-            rebalancings = loop.run_until_complete(fetch())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"爬取调仓记录失败: {e}")
-    
-    return [r.__dict__ for r in rebalancings]
+    return [
+        {
+            "cube_id": r.cube_id,
+            "title": r.title,
+            "link": r.link,
+            "description": r.description,
+            "pub_date": r.pub_date,
+        }
+        for r in rebalancings
+    ]

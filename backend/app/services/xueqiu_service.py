@@ -1,15 +1,7 @@
 """
-mini脱水雪球 - 数据爬取服务
+脱水雪球 - 数据爬取服务
 
-优先直接访问雪球 API，RSSHub 作为备用
-
-雪球公开 API（需要浏览器环境或 Cookie）：
-- /v4/statuses/user_timeline.json - 用户动态
-- /cubes/rebalancing/history.json - 组合调仓
-
-RSSHub 雪球路由（备用）：
-- /xueqiu/user/:id/:type? - 用户动态 (type: 0=原发布, 2=长文, 11=交易)
-- /xueqiu/snb/:id - 组合调仓
+直接访问雪球 API（需要 Cookie）
 """
 
 import os
@@ -18,16 +10,9 @@ import httpx
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from dataclasses import dataclass, field, asdict
-import xml.etree.ElementTree as ET
 
 # 雪球 API
 XUEQIU_BASE = "https://xueqiu.com"
-
-# RSSHub 公共实例
-RSSHUB_INSTANCES = [
-    "https://rsshub.app",
-    "https://rsshub.rssforever.com",
-]
 
 # 动态类型
 STATUS_TYPES = {
@@ -91,8 +76,7 @@ class Rebalancing:
 class XueqiuService:
     """雪球数据服务"""
     
-    def __init__(self, rsshub_url: str = None):
-        self.rsshub_url = rsshub_url or RSSHUB_INSTANCES[0]
+    def __init__(self):
         self.cookie_file = os.path.expanduser("~/.xueqiu_cookie")
         self.cookie = ""
         self._load_cookie()
@@ -100,8 +84,12 @@ class XueqiuService:
     def _load_cookie(self) -> str:
         """加载 Cookie"""
         if os.path.exists(self.cookie_file):
-            with open(self.cookie_file, "r") as f:
-                self.cookie = f.read().strip()
+            try:
+                with open(self.cookie_file, "r", encoding="utf-8") as f:
+                    self.cookie = f.read().strip()
+            except Exception as e:
+                print(f"加载 Cookie 失败: {e}")
+                self.cookie = ""
         return self.cookie
     
     def _get_headers(self) -> Dict[str, str]:
@@ -114,37 +102,42 @@ class XueqiuService:
             "Referer": "https://xueqiu.com/",
         }
         if self.cookie:
-            headers["Cookie"] = self.cookie
+            # 确保 Cookie 是有效的字符串
+            try:
+                # 尝试编码为 ASCII，如果有问题就移除特殊字符
+                self.cookie.encode('ascii')
+                headers["Cookie"] = self.cookie
+            except UnicodeEncodeError:
+                # 移除或替换非 ASCII 字符
+                safe_cookie = self.cookie.encode('ascii', errors='ignore').decode('ascii')
+                headers["Cookie"] = safe_cookie
         return headers
     
     def _fetch_json(self, url: str, timeout: int = 15) -> Optional[Dict]:
         """获取 JSON 数据"""
-        with httpx.Client(follow_redirects=True, timeout=timeout) as client:
-            try:
+        try:
+            with httpx.Client(follow_redirects=True, timeout=timeout) as client:
                 resp = client.get(url, headers=self._get_headers())
                 if resp.status_code == 200:
-                    # 检查是否是 JSON
                     try:
                         return resp.json()
                     except:
-                        # 可能被 WAF 拦截返回 HTML
                         if "aliyun_waf" in resp.text:
-                            print("雪球 WAF 拦截，请配置 Cookie")
+                            print("雪球 WAF 拦截，Cookie 可能无效")
                         return None
-            except Exception as e:
-                print(f"请求失败: {e}")
+        except Exception as e:
+            print(f"请求失败: {e}")
         return None
     
     def get_user_info(self, user_id: str) -> Optional[UserInfo]:
-        """获取用户信息 - 直接访问雪球 API"""
+        """获取用户信息"""
         url = f"{XUEQIU_BASE}/v4/statuses/user_timeline.json?user_id={user_id}&count=1"
         data = self._fetch_json(url)
         
         if not data:
-            # 尝试备用方案：RSSHub
-            return self.get_user_info_from_rss(user_id)
+            return None
         
-        # 解析用户信息
+        # 从 users 字段提取
         users = data.get("users", {})
         user_data = users.get(str(user_id), {})
         
@@ -160,7 +153,7 @@ class XueqiuService:
                 status_count=user_data.get("status_count", 0),
             )
         
-        # 备用：从 statuses 中提取
+        # 从 statuses 中提取
         statuses = data.get("statuses", [])
         if statuses:
             first = statuses[0]
@@ -178,173 +171,92 @@ class XueqiuService:
         
         return None
     
-    def _fetch_rss(self, path: str, timeout: int = 30) -> Optional[str]:
-        """获取 RSS feed（备用方案）"""
-        url = f"{self.rsshub_url}{path}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Accept": "application/rss+xml, application/xml, text/xml",
-        }
-        
-        if self.cookie:
-            headers["X-Cookie"] = self.cookie
-        
-        with httpx.Client(follow_redirects=True, timeout=timeout) as client:
-            try:
-                resp = client.get(url, headers=headers)
-                if resp.status_code == 200:
-                    return resp.text
-            except Exception as e:
-                print(f"RSSHub 请求失败: {e}")
-        
-        return None
-    
-    def _parse_rss(self, rss_text: str) -> Dict[str, Any]:
-        """解析 RSS XML"""
-        result = {
-            "title": "",
-            "description": "",
-            "items": []
-        }
-        
-        try:
-            root = ET.fromstring(rss_text)
-            channel = root.find("channel")
-            
-            if channel is None:
-                return result
-            
-            title_el = channel.find("title")
-            if title_el is not None:
-                result["title"] = title_el.text or ""
-            
-            desc_el = channel.find("description")
-            if desc_el is not None:
-                result["description"] = desc_el.text or ""
-            
-            for item in channel.findall("item"):
-                item_data = {
-                    "title": "",
-                    "link": "",
-                    "description": "",
-                    "pubDate": "",
-                    "author": "",
-                }
-                
-                for child in item:
-                    tag = child.tag
-                    if tag in item_data:
-                        item_data[tag] = child.text or ""
-                    elif tag == "{http://purl.org/dc/elements/1.1/}creator":
-                        item_data["author"] = child.text or ""
-                
-                result["items"].append(item_data)
-            
-        except Exception as e:
-            print(f"RSS 解析失败: {e}")
-        
-        return result
-    
-    def get_user_info_from_rss(self, user_id: str) -> Optional[UserInfo]:
-        """从 RSS 中提取用户信息（备用方案）"""
-        path = f"/xueqiu/user/{user_id}/0"
-        rss_text = self._fetch_rss(path)
-        
-        if not rss_text:
-            return None
-        
-        data = self._parse_rss(rss_text)
-        title = data.get("title", "")
-        
-        screen_name = ""
-        if " 的雪球" in title:
-            screen_name = title.split(" 的雪球")[0]
-        
-        return UserInfo(
-            user_id=user_id,
-            screen_name=screen_name,
-            crawled_at=datetime.now().isoformat(),
-        )
-    
     def get_user_statuses(
         self,
         user_id: str,
         status_type: int = 0,
         count: int = 20
     ) -> List[Status]:
-        """获取用户动态
-        
-        Args:
-            user_id: 用户ID
-            status_type: 动态类型 (0=原发布, 2=长文, 11=交易)
-            count: 数量
-        """
-        # 尝试直接访问雪球 API
+        """获取用户动态"""
         url = f"{XUEQIU_BASE}/v4/statuses/user_timeline.json?user_id={user_id}&type={status_type}&count={count}"
         data = self._fetch_json(url)
         
-        if data and "statuses" in data:
-            statuses = []
-            for s in data.get("statuses", [])[:count]:
+        if not data or "statuses" not in data:
+            return []
+        
+        statuses = []
+        for s in data.get("statuses", [])[:count]:
+            try:
+                created_at = ""
+                if s.get("created_at"):
+                    created_at = datetime.fromtimestamp(s["created_at"] / 1000).isoformat()
+                
                 statuses.append(Status(
                     id=str(s.get("id", "")),
                     user_id=str(user_id),
-                    text=s.get("text", ""),
+                    text=s.get("text", "")[:500] if s.get("text") else "",  # 截断长文本
                     title=s.get("title", ""),
                     link=f"https://xueqiu.com/{s.get('user', {}).get('id', '')}/{s.get('id', '')}",
-                    created_at=datetime.fromtimestamp(s.get("created_at", 0) / 1000).isoformat() if s.get("created_at") else "",
+                    created_at=created_at,
                     retweet_count=s.get("retweet_count", 0),
                     reply_count=s.get("reply_count", 0),
                     like_count=s.get("like_count", 0),
                 ))
-            return statuses
-        
-        # 备用：RSSHub
-        path = f"/xueqiu/user/{user_id}/{status_type}"
-        rss_text = self._fetch_rss(path)
-        
-        if not rss_text:
-            return []
-        
-        rss_data = self._parse_rss(rss_text)
-        statuses = []
-        
-        for item in rss_data.get("items", [])[:count]:
-            statuses.append(Status(
-                id="",
-                user_id=user_id,
-                text=item.get("description", ""),
-                title=item.get("title", ""),
-                link=item.get("link", ""),
-                created_at=item.get("pubDate", ""),
-            ))
+            except Exception as e:
+                print(f"解析动态失败: {e}")
+                continue
         
         return statuses
     
+    def get_user_portfolios(self, user_id: str) -> List[Portfolio]:
+        """获取用户组合列表"""
+        url = f"{XUEQIU_BASE}/cubes/list.json?user_id={user_id}&count=10"
+        data = self._fetch_json(url)
+        
+        if not data or "list" not in data:
+            return []
+        
+        portfolios = []
+        for p in data.get("list", []):
+            try:
+                portfolios.append(Portfolio(
+                    cube_id=str(p.get("cube_id", "")),
+                    name=p.get("name", ""),
+                    symbol=p.get("symbol", ""),
+                    net_value=float(p.get("net_value", 0)),
+                    total_gain=float(p.get("total_gain", 0)),
+                ))
+            except Exception as e:
+                print(f"解析组合失败: {e}")
+                continue
+        
+        return portfolios
+    
     def get_portfolio_rebalancing(
         self,
-        cube_symbol: str,
+        cube_id: str,
         count: int = 10
     ) -> List[Rebalancing]:
         """获取组合调仓历史"""
-        path = f"/xueqiu/snb/{cube_symbol}"
-        rss_text = self._fetch_rss(path)
+        url = f"{XUEQIU_BASE}/cubes/rebalancing/history.json?cube_id={cube_id}&count={count}"
+        data = self._fetch_json(url)
         
-        if not rss_text:
+        if not data or "list" not in data:
             return []
         
-        data = self._parse_rss(rss_text)
         rebalancings = []
-        
-        for item in data.get("items", [])[:count]:
-            rebalancings.append(Rebalancing(
-                cube_id=cube_symbol,
-                title=item.get("title", ""),
-                link=item.get("link", ""),
-                description=item.get("description", ""),
-                pub_date=item.get("pubDate", ""),
-            ))
+        for r in data.get("list", []):
+            try:
+                rebalancings.append(Rebalancing(
+                    cube_id=cube_id,
+                    title=r.get("title", ""),
+                    link=f"https://xueqiu.com/cubes/rebalancing/{r.get('id', '')}",
+                    description=r.get("description", "")[:500] if r.get("description") else "",
+                    pub_date=r.get("created_at", ""),
+                ))
+            except Exception as e:
+                print(f"解析调仓失败: {e}")
+                continue
         
         return rebalancings
     
@@ -389,7 +301,7 @@ def crawl_vip(user_id: str) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import sys
-    user_id = sys.argv[1] if len(sys.argv) > 1 else "2292705444"
+    user_id = sys.argv[1] if len(sys.argv) > 1 else "1247347543"
     
     print(f"爬取用户 {user_id}...")
     result = crawl_vip(user_id)

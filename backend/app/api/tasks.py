@@ -1,73 +1,67 @@
 """
-定时任务管理 API
+任务管理 API - 按需爬取
 """
 
-from fastapi import APIRouter, HTTPException
-from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from typing import Optional
 from pydantic import BaseModel
+
+from app.core.database import get_db
+from app.models.models import VIPUser
 
 router = APIRouter()
 
 
-class TaskStatus(BaseModel):
-    running: bool
-    last_crawl_time: Optional[str] = None
-    crawl_count: int = 0
-    error_count: int = 0
-    interval: int = 900
-
-
-class ManualCrawlResult(BaseModel):
+class CrawlResult(BaseModel):
     vip_id: int
     success: bool
+    user_info: Optional[dict] = None
     statuses_count: int = 0
-    portfolios_count: int = 0
     error: Optional[str] = None
 
 
-@router.get("/status", response_model=TaskStatus)
-async def get_task_status():
-    """获取定时任务状态"""
-    from app.tasks.crawler_tasks import get_scheduler_status
-    return get_scheduler_status()
-
-
-@router.post("/start")
-async def start_tasks():
-    """启动定时任务"""
-    from app.tasks.crawler_tasks import start_scheduler
-    await start_scheduler()
-    return {"message": "定时任务已启动"}
-
-
-@router.post("/stop")
-async def stop_tasks():
-    """停止定时任务"""
-    from app.tasks.crawler_tasks import stop_scheduler
-    await stop_scheduler()
-    return {"message": "定时任务已停止"}
-
-
-@router.post("/crawl/{vip_id}", response_model=ManualCrawlResult)
-async def manual_crawl(vip_id: int):
-    """手动触发爬取指定大V"""
-    from app.tasks.crawler_tasks import crawl_vip_now
-    
-    result = await crawl_vip_now(vip_id)
-    
-    return ManualCrawlResult(
-        vip_id=vip_id,
-        success=result.get("success", False),
-        statuses_count=len(result.get("statuses", [])),
-        portfolios_count=len(result.get("portfolios", [])),
-        error=result.get("error")
+@router.post("/crawl/{vip_id}", response_model=CrawlResult)
+async def crawl_vip(
+    vip_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """爬取指定大V数据"""
+    # 获取大V信息
+    result = await db.execute(
+        select(VIPUser).where(VIPUser.id == vip_id)
     )
-
-
-@router.get("/changes/{vip_id}")
-async def get_holding_changes(vip_id: int):
-    """获取大V持仓变动"""
-    from app.tasks.crawler_tasks import detect_holding_changes
+    vip = result.scalar_one_or_none()
     
-    changes = await detect_holding_changes(vip_id)
-    return {"vip_id": vip_id, "changes": changes}
+    if not vip:
+        raise HTTPException(status_code=404, detail="大V不存在")
+    
+    # 执行爬取
+    from app.services.xueqiu_service import crawl_vip
+    
+    try:
+        crawl_result = crawl_vip(vip.xueqiu_id)
+        
+        # 更新大V信息
+        if crawl_result.get("success") and crawl_result.get("user_info"):
+            user_info = crawl_result["user_info"]
+            vip.nickname = user_info.get("screen_name") or vip.nickname
+            vip.followers = user_info.get("followers_count") or vip.followers
+            vip.avatar = user_info.get("avatar") or vip.avatar
+            vip.description = user_info.get("description") or vip.description
+            await db.commit()
+        
+        return CrawlResult(
+            vip_id=vip_id,
+            success=crawl_result.get("success", False),
+            user_info=crawl_result.get("user_info"),
+            statuses_count=len(crawl_result.get("statuses", [])),
+            error=crawl_result.get("error"),
+        )
+    except Exception as e:
+        return CrawlResult(
+            vip_id=vip_id,
+            success=False,
+            error=str(e),
+        )
