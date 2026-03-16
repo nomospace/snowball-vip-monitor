@@ -288,10 +288,10 @@ class FetchCommentsRequest(BaseModel):
 
 
 @router.post("/fetch-statuses")
-async def fetch_statuses(data: FetchStatusesRequest):
-    """获取用户动态（使用前端提供的Cookie）"""
+async def fetch_statuses(data: FetchStatusesRequest, db: AsyncSession = Depends(get_db)):
+    """获取用户动态（使用前端提供的Cookie）- 自动分析并缓存"""
     import os
-    import tempfile
+    import json
     
     # 临时保存前端提供的Cookie
     cookie_file = os.path.expanduser("~/.xueqiu_cookie_temp")
@@ -309,11 +309,18 @@ async def fetch_statuses(data: FetchStatusesRequest):
             os.rename(cookie_file, original_cookie_file)
         
         from app.services.xueqiu_service import XueqiuService
+        from app.models.models import StatusAnalysis
+        
         service = XueqiuService()
         statuses = service.get_user_statuses(data.user_id, data.status_type, data.count)
         
-        return [
-            {
+        # 获取 API Key
+        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+        
+        # 批量分析所有动态
+        result = []
+        for s in statuses:
+            status_data = {
                 "id": s.id,
                 "user_id": s.user_id,
                 "text": s.text,
@@ -324,8 +331,54 @@ async def fetch_statuses(data: FetchStatusesRequest):
                 "reply_count": s.reply_count,
                 "like_count": s.like_count,
             }
-            for s in statuses
-        ]
+            
+            # 检查缓存
+            cached_result = await db.execute(
+                select(StatusAnalysis).where(StatusAnalysis.status_id == s.id)
+            )
+            cached = cached_result.scalar_one_or_none()
+            
+            if cached:
+                # 使用缓存
+                status_data["analysis"] = {
+                    "coreViewpoint": cached.core_viewpoint,
+                    "relatedStocks": json.loads(cached.related_stocks) if cached.related_stocks else [],
+                    "positionSignals": json.loads(cached.position_signals) if cached.position_signals else [],
+                    "keyLogic": json.loads(cached.key_logic) if cached.key_logic else [],
+                    "riskWarnings": json.loads(cached.risk_warnings) if cached.risk_warnings else [],
+                    "overallAttitude": cached.overall_attitude,
+                    "summary": cached.summary,
+                    "_cached": True
+                }
+            elif api_key and s.text:
+                # 调用 AI 分析
+                try:
+                    analysis = await _analyze_text(s.text, s.title, api_key)
+                    # 保存到数据库
+                    saved = StatusAnalysis(
+                        status_id=s.id,
+                        user_id=s.user_id,
+                        core_viewpoint=analysis.get("coreViewpoint", ""),
+                        related_stocks=json.dumps(analysis.get("relatedStocks", [])),
+                        position_signals=json.dumps(analysis.get("positionSignals", [])),
+                        key_logic=json.dumps(analysis.get("keyLogic", [])),
+                        risk_warnings=json.dumps(analysis.get("riskWarnings", [])),
+                        overall_attitude=analysis.get("overallAttitude", "中性"),
+                        summary=analysis.get("summary", ""),
+                        raw_content=s.text[:1000]
+                    )
+                    db.add(saved)
+                    await db.commit()
+                    
+                    status_data["analysis"] = analysis
+                except Exception as e:
+                    status_data["analysis"] = {"error": f"分析失败: {str(e)}"}
+            else:
+                status_data["analysis"] = None
+            
+            result.append(status_data)
+        
+        return result
     finally:
         # 恢复原始Cookie文件
         original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
@@ -333,6 +386,92 @@ async def fetch_statuses(data: FetchStatusesRequest):
             if os.path.exists(original_cookie_file):
                 os.remove(original_cookie_file)
             os.rename(original_cookie_file + ".bak", original_cookie_file)
+
+
+async def _analyze_text(text: str, title: str, api_key: str) -> dict:
+    """调用 AI 分析文本"""
+    import httpx
+    import json
+    import re
+    
+    prompt = f"""请分析以下雪球大V发言内容，提取关键信息：
+
+标题：{title or '无'}
+内容：{text[:2000]}
+
+请按以下格式输出（JSON格式，使用英文字段名）：
+
+{{
+  "coreViewpoint": "一句话概括核心观点",
+  "relatedStocks": [
+    {{"name": "股票名称", "code": "股票代码", "attitude": "看多/看空/中性/观望", "reason": "简要理由"}}
+  ],
+  "positionSignals": [
+    {{"operation": "新增/加仓/减仓/清仓", "stock": "股票名称", "basis": "原文依据"}}
+  ],
+  "keyLogic": ["逻辑点1", "逻辑点2"],
+  "riskWarnings": ["风险点1"],
+  "overallAttitude": "整体看多/看空/中性/观望",
+  "summary": "100字以内的精炼总结"
+}}
+
+注意：
+1. 只基于原文内容分析，不要虚构信息
+2. 识别雪球常用术语如"宁王"=宁德时代、"茅指数"=贵州茅台等
+3. 如果原文没有明确提及股票，relatedStocks数组为空
+4. 态度要客观，不要过度解读"""
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "qwen-turbo",
+                "input": {
+                    "messages": [
+                        {"role": "system", "content": "你是一位专业的金融分析师，擅长解读雪球大V发言。请严格基于原文内容进行分析，不要虚构信息。输出必须是纯JSON格式，不要包含markdown代码块标记。"},
+                        {"role": "user", "content": prompt}
+                    ]
+                },
+                "parameters": {
+                    "temperature": 0.3,
+                    "max_tokens": 1000
+                }
+            }
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            output = result.get("output", {})
+            content = output.get("text", "")
+            
+            if not content:
+                choices = result.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+            
+            # 提取JSON部分
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                try:
+                    return json.loads(json_match.group())
+                except:
+                    pass
+            
+            return {
+                "coreViewpoint": content[:200] if content else "分析完成",
+                "relatedStocks": [],
+                "positionSignals": [],
+                "keyLogic": [],
+                "riskWarnings": [],
+                "overallAttitude": "中性",
+                "summary": content[:100] if content else ""
+            }
+        else:
+            return {"error": f"AI分析失败 ({response.status_code})"}
 
 
 @router.post("/fetch-comments")
