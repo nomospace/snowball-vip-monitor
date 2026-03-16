@@ -184,6 +184,10 @@ class XueqiuService:
                 statuses = []
                 
                 for s in data.get('statuses', []):
+                    # 获取用户昵称
+                    user = s.get('user', {})
+                    screen_name = user.get('screen_name', '')
+                    
                     status = Status(
                         id=str(s.get('id', '')),
                         user_id=str(s.get('user_id', '')),
@@ -249,6 +253,54 @@ class XueqiuService:
             
         except Exception as e:
             print(f"获取用户组合失败: {e}")
+            return []
+    
+    def get_user_comments(
+        self,
+        user_id: str,
+        count: int = 20
+    ) -> List[Status]:
+        """获取用户评论/回复"""
+        self._random_delay()
+        
+        try:
+            # 评论类型通常是 type=4 或者使用专门的评论API
+            url = f"{XUEQIU_API}/v4/statuses/user_timeline.json"
+            params = {
+                'user_id': user_id,
+                'page': 1,
+                'type': 4,  # 问答/评论类型
+                'count': count,
+            }
+            
+            resp = self.session.get(url, params=params, timeout=15)
+            
+            if resp.status_code == 200 and 'json' in resp.headers.get('Content-Type', ''):
+                data = resp.json()
+                comments = []
+                
+                for s in data.get('statuses', []):
+                    comment = Status(
+                        id=str(s.get('id', '')),
+                        user_id=str(s.get('user_id', '')),
+                        text=s.get('text', ''),
+                        title=s.get('title', ''),
+                        link=f"https://xueqiu.com/{s.get('user_id', '')}/{s.get('id', '')}",
+                        created_at=datetime.fromtimestamp(
+                            s.get('created_at', 0) / 1000
+                        ).isoformat() if s.get('created_at') else '',
+                        retweet_count=s.get('retweet_count', 0),
+                        reply_count=s.get('reply_count', 0),
+                        like_count=s.get('like_count', 0),
+                    )
+                    comments.append(comment)
+                
+                return comments
+            
+            return []
+            
+        except Exception as e:
+            print(f"获取用户评论失败: {e}")
             return []
     
     def get_portfolio_rebalancing(

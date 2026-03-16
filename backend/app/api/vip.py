@@ -262,6 +262,12 @@ class FetchStatusesRequest(BaseModel):
     cookie: str = ""
 
 
+class FetchCommentsRequest(BaseModel):
+    user_id: str
+    count: int = 20
+    cookie: str = ""
+
+
 @router.post("/fetch-statuses")
 async def fetch_statuses(data: FetchStatusesRequest):
     """获取用户动态（使用前端提供的Cookie）"""
@@ -303,6 +309,49 @@ async def fetch_statuses(data: FetchStatusesRequest):
         ]
     finally:
         # 恢复原始Cookie文件
+        original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
+        if os.path.exists(original_cookie_file + ".bak"):
+            if os.path.exists(original_cookie_file):
+                os.remove(original_cookie_file)
+            os.rename(original_cookie_file + ".bak", original_cookie_file)
+
+
+@router.post("/fetch-comments")
+async def fetch_comments(data: FetchCommentsRequest):
+    """获取用户评论/回复（使用前端提供的Cookie）"""
+    import os
+    
+    cookie_file = os.path.expanduser("~/.xueqiu_cookie_temp")
+    
+    try:
+        if data.cookie:
+            with open(cookie_file, "w") as f:
+                f.write(data.cookie)
+            
+            original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
+            if os.path.exists(original_cookie_file):
+                os.rename(original_cookie_file, original_cookie_file + ".bak")
+            os.rename(cookie_file, original_cookie_file)
+        
+        from app.services.xueqiu_service import XueqiuService
+        service = XueqiuService()
+        comments = service.get_user_comments(data.user_id, data.count)
+        
+        return [
+            {
+                "id": c.id,
+                "user_id": c.user_id,
+                "text": c.text,
+                "title": c.title,
+                "link": c.link,
+                "created_at": c.created_at,
+                "retweet_count": c.retweet_count,
+                "reply_count": c.reply_count,
+                "like_count": c.like_count,
+            }
+            for c in comments
+        ]
+    finally:
         original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
         if os.path.exists(original_cookie_file + ".bak"):
             if os.path.exists(original_cookie_file):

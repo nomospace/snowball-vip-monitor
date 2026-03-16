@@ -1,8 +1,23 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Pipe, PipeTransform } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+
+// 富文本处理 Pipe
+@Pipe({
+  name: 'richText',
+  standalone: true
+})
+export class RichTextPipe implements PipeTransform {
+  transform(value: string): string {
+    if (!value) return '';
+    
+    // 已经是HTML格式，直接返回
+    // 雪球的text已经是HTML格式，包含 <p>, <a>, <br/> 等标签
+    return value;
+  }
+}
 
 interface VIPUser {
   id: number;
@@ -40,7 +55,7 @@ interface HoldingChange {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule],
+  imports: [CommonModule, RouterLink, FormsModule, RichTextPipe],
   template: `
     <div class="min-h-screen bg-gray-50">
       <!-- 顶部标题栏 -->
@@ -220,9 +235,8 @@ interface HoldingChange {
                         </div>
                       </div>
                       
-                      <div class="text-gray-700 text-sm leading-relaxed">
-                        {{ item.text | slice:0:200 }}{{ item.text.length > 200 ? '...' : '' }}
-                      </div>
+                      <!-- 富文本内容渲染 -->
+                      <div class="text-gray-700 text-sm leading-relaxed rich-text" [innerHTML]="item.text | richText"></div>
                       
                       <div class="mt-3 flex justify-end">
                         <a [href]="item.link" target="_blank" class="text-xs text-blue-500 hover:underline">
@@ -284,7 +298,27 @@ interface HoldingChange {
         </div>
       </div>
     }
-  `
+  `,
+  styles: [`
+    :host ::ng-deep .rich-text {
+      word-break: break-word;
+    }
+    :host ::ng-deep .rich-text p {
+      margin: 0.5rem 0;
+    }
+    :host ::ng-deep .rich-text a {
+      color: #3b82f6;
+      text-decoration: underline;
+    }
+    :host ::ng-deep .rich-text a:hover {
+      color: #2563eb;
+    }
+    :host ::ng-deep .rich-text br {
+      display: block;
+      content: "";
+      margin-top: 0.5rem;
+    }
+  `]
 })
 export class DashboardComponent implements OnInit {
   myVips: VIPUser[] = [];
@@ -313,13 +347,11 @@ export class DashboardComponent implements OnInit {
     this.loadMyVips();
   }
 
-  // 从浏览器 localStorage 加载 Cookie
   loadCookieFromBrowser() {
     const savedCookie = localStorage.getItem('xueqiu_cookie');
     this.cookieStatus = !!savedCookie;
   }
 
-  // 保存 Cookie 到浏览器
   saveCookie() {
     if (!this.cookieInput.trim()) return;
     
@@ -328,7 +360,6 @@ export class DashboardComponent implements OnInit {
     this.showCookieModal = false;
     this.cookieInput = '';
     
-    // 刷新数据
     this.loadData();
   }
 
@@ -346,8 +377,10 @@ export class DashboardComponent implements OnInit {
     switch (this.activeTab) {
       case 'timeline':
       case 'posts':
+        this.loadTimeline(0);
+        break;
       case 'comments':
-        this.loadTimeline();
+        this.loadComments();
         break;
       case 'holdings':
         this.loadHoldings();
@@ -357,6 +390,7 @@ export class DashboardComponent implements OnInit {
 
   switchTab(tab: string) {
     this.activeTab = tab;
+    this.timeline = [];
     this.loadData();
   }
 
@@ -364,7 +398,7 @@ export class DashboardComponent implements OnInit {
     this.loadData();
   }
 
-  loadTimeline() {
+  loadTimeline(statusType: number = 0) {
     if (this.myVips.length === 0) {
       this.timeline = [];
       return;
@@ -382,18 +416,16 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    const allStatuses: Status[] = [];
-    let loaded = 0;
-    
     // 根据数据类型确定 status_type
-    let statusType = 0; // 默认原发布
     if (this.dataType === 'trades') {
-      statusType = 11; // 交易
+      statusType = 11;
     }
 
+    const allStatuses: Status[] = [];
+    let loaded = 0;
+    const cookie = localStorage.getItem('xueqiu_cookie') || '';
+    
     for (const vip of vipsToLoad) {
-      const cookie = localStorage.getItem('xueqiu_cookie') || '';
-      
       this.http.post<Status[]>('/api/vip/fetch-statuses', {
         user_id: vip.xueqiu_id,
         status_type: statusType,
@@ -412,6 +444,51 @@ export class DashboardComponent implements OnInit {
         error: () => {
           loaded++;
           this.finishTimelineLoading(allStatuses, loaded, vipsToLoad.length);
+        }
+      });
+    }
+  }
+
+  loadComments() {
+    if (this.myVips.length === 0) {
+      this.timeline = [];
+      return;
+    }
+
+    this.loading = true;
+    this.timeline = [];
+    
+    const vipsToLoad = this.selectedVipId === 'all' 
+      ? this.myVips 
+      : this.myVips.filter(v => v.id === Number(this.selectedVipId));
+
+    if (vipsToLoad.length === 0) {
+      this.loading = false;
+      return;
+    }
+
+    const allComments: Status[] = [];
+    let loaded = 0;
+    const cookie = localStorage.getItem('xueqiu_cookie') || '';
+    
+    for (const vip of vipsToLoad) {
+      this.http.post<Status[]>('/api/vip/fetch-comments', {
+        user_id: vip.xueqiu_id,
+        count: 10,
+        cookie: cookie
+      }).subscribe({
+        next: (comments) => {
+          for (const c of comments) {
+            c.vip_nickname = vip.nickname;
+            c.vip_id = vip.id;
+            allComments.push(c);
+          }
+          loaded++;
+          this.finishTimelineLoading(allComments, loaded, vipsToLoad.length);
+        },
+        error: () => {
+          loaded++;
+          this.finishTimelineLoading(allComments, loaded, vipsToLoad.length);
         }
       });
     }
@@ -436,7 +513,6 @@ export class DashboardComponent implements OnInit {
     this.holdings = [];
     
     // TODO: 实现真实的持仓变更API
-    // 目前显示模拟数据
     setTimeout(() => {
       this.holdings = [
         { stock_code: '600519', stock_name: '贵州茅台', operation: '加仓', vip_nickname: '方三文', vip_id: 2, created_at: new Date().toISOString(), weight: 8.5 },
