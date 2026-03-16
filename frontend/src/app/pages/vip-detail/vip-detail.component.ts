@@ -1,12 +1,24 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Pipe, PipeTransform } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { VipService, VIPUser, Status, Portfolio, Rebalancing } from '../../services/vip.service';
 
+// 富文本处理 Pipe
+@Pipe({
+  name: 'richText',
+  standalone: true
+})
+export class RichTextPipe implements PipeTransform {
+  transform(value: string): string {
+    if (!value) return '';
+    return value;
+  }
+}
+
 @Component({
   selector: 'app-vip-detail',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RichTextPipe],
   template: `
     <div class="space-y-6">
       <!-- 加载状态 -->
@@ -74,7 +86,8 @@ import { VipService, VIPUser, Status, Portfolio, Rebalancing } from '../../servi
                       @if (status.title) {
                         <div class="font-bold text-lg mb-2">{{ status.title }}</div>
                       }
-                      <div class="text-gray-700 whitespace-pre-wrap">{{ status.text | slice:0:300 }}{{ status.text.length > 300 ? '...' : '' }}</div>
+                      <!-- 富文本渲染 -->
+                      <div class="text-gray-700 rich-text" [innerHTML]="status.text | richText"></div>
                       <div class="mt-3 flex items-center gap-4 text-sm text-gray-500">
                         <span>{{ formatTime(status.created_at) }}</span>
                         @if (status.retweet_count > 0) {
@@ -106,7 +119,8 @@ import { VipService, VIPUser, Status, Portfolio, Rebalancing } from '../../servi
                 <div class="space-y-4">
                   @for (status of tradeStatuses; track status.id) {
                     <div class="p-4 bg-gray-50 rounded-lg">
-                      <div class="text-gray-700">{{ status.text }}</div>
+                      <!-- 富文本渲染 -->
+                      <div class="text-gray-700 rich-text" [innerHTML]="status.text | richText"></div>
                       <div class="mt-2 text-sm text-gray-500">{{ formatTime(status.created_at) }}</div>
                     </div>
                   }
@@ -189,7 +203,27 @@ import { VipService, VIPUser, Status, Portfolio, Rebalancing } from '../../servi
         }
       }
     </div>
-  `
+  `,
+  styles: [`
+    :host ::ng-deep .rich-text {
+      word-break: break-word;
+    }
+    :host ::ng-deep .rich-text p {
+      margin: 0.5rem 0;
+    }
+    :host ::ng-deep .rich-text a {
+      color: #3b82f6;
+      text-decoration: underline;
+    }
+    :host ::ng-deep .rich-text a:hover {
+      color: #2563eb;
+    }
+    :host ::ng-deep .rich-text br {
+      display: block;
+      content: "";
+      margin-top: 0.5rem;
+    }
+  `]
 })
 export class VipDetailComponent implements OnInit {
   vip: VIPUser | null = null;
