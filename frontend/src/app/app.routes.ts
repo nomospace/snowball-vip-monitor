@@ -18,10 +18,6 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/vip-list/vip-list.component').then(m => m.VipListComponent)
   },
   {
-    path: 'vip/:id',
-    loadComponent: () => import('./pages/vip-detail/vip-detail.component').then(m => m.VipDetailComponent)
-  },
-  {
     path: 'holdings',
     loadComponent: () => import('./pages/holding-list/holding-list.component').then(m => m.HoldingListComponent)
   },

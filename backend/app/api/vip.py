@@ -377,9 +377,9 @@ async def get_daily_summary(
         analyses_result = await db.execute(
             select(StatusAnalysis)
             .where(StatusAnalysis.user_id == vip.xueqiu_id)
-            .where(StatusAnalysis.created_at >= start_of_day)
-            .where(StatusAnalysis.created_at < end_of_day)
-            .order_by(StatusAnalysis.created_at)
+            .where(StatusAnalysis.status_created_at >= start_of_day)
+            .where(StatusAnalysis.status_created_at < end_of_day)
+            .order_by(StatusAnalysis.status_created_at)
         )
         analyses = analyses_result.scalars().all()
         if not analyses:
@@ -387,8 +387,10 @@ async def get_daily_summary(
         
         emotion_trajectory = []
         for a in analyses:
+            # 使用原始发言时间，如果没有则使用记录创建时间
+            post_time = a.status_created_at or a.created_at
             emotion_trajectory.append({
-                "time": a.created_at.strftime("%H:%M") if a.created_at else "",
+                "time": post_time.strftime("%H:%M") if post_time else "",
                 "content": (a.raw_content or "")[:200],
                 "attitude": a.overall_attitude,
                 "viewpoint": a.core_viewpoint
@@ -441,6 +443,34 @@ async def get_vip_detail(
         raise HTTPException(status_code=404, detail="大V不存在")
     
     return vip
+
+
+class VIPUpdate(BaseModel):
+    nickname: Optional[str] = None
+
+
+@router.patch("/{vip_id}")
+async def update_vip(
+    vip_id: int,
+    data: VIPUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """更新大V信息"""
+    result = await db.execute(
+        select(VIPUser).where(VIPUser.id == vip_id)
+    )
+    vip = result.scalar_one_or_none()
+    
+    if not vip:
+        raise HTTPException(status_code=404, detail="大V不存在")
+    
+    if data.nickname is not None:
+        vip.nickname = data.nickname
+    
+    await db.commit()
+    await db.refresh(vip)
+    
+    return {"message": "更新成功", "nickname": vip.nickname}
 
 
 @router.delete("/{vip_id}")
@@ -1196,9 +1226,9 @@ async def refresh_daily_summary(
         analyses_result = await db.execute(
             select(StatusAnalysis)
             .where(StatusAnalysis.user_id == vip.xueqiu_id)
-            .where(StatusAnalysis.created_at >= start_of_day)
-            .where(StatusAnalysis.created_at < end_of_day)
-            .order_by(StatusAnalysis.created_at)
+            .where(StatusAnalysis.status_created_at >= start_of_day)
+            .where(StatusAnalysis.status_created_at < end_of_day)
+            .order_by(StatusAnalysis.status_created_at)
         )
         analyses = analyses_result.scalars().all()
         if not analyses:
@@ -1206,8 +1236,10 @@ async def refresh_daily_summary(
         
         emotion_trajectory = []
         for a in analyses:
+            # 使用原始发言时间，如果没有则使用记录创建时间
+            post_time = a.status_created_at or a.created_at
             emotion_trajectory.append({
-                "time": a.created_at.strftime("%H:%M") if a.created_at else "",
+                "time": post_time.strftime("%H:%M") if post_time else "",
                 "content": (a.raw_content or "")[:200],
                 "attitude": a.overall_attitude,
                 "viewpoint": a.core_viewpoint
@@ -1292,13 +1324,15 @@ async def fetch_all_timeline(
     # 生成缓存键（基于请求参数 + 10分钟时间槽）
     cache_key = f"timeline_{','.join(map(str, sorted(data.vip_ids))) if data.vip_ids else 'all'}_{get_cache_key_10min()}"
     
-    # 检查内存缓存（10分钟有效）
+    # 检查内存缓存（10分钟有效，且数据不为空）
     if not data.force_refresh and cache_key in _daily_summary_cache:
         cached = _daily_summary_cache[cache_key]
         cached_data = cached["data"]
-        cached_data["_cached"] = True
-        cached_data["_cache_time"] = cached["cached_at"].strftime("%Y-%m-%d %H:%M:%S")
-        return cached_data
+        # 只有当数据不为空时才使用缓存
+        if cached_data.get("total", 0) > 0:
+            cached_data["_cached"] = True
+            cached_data["_cache_time"] = cached["cached_at"].strftime("%Y-%m-%d %H:%M:%S")
+            return cached_data
     
     # 检查数据库中是否有分析数据
     existing_count = await db.execute(select(StatusAnalysis))
@@ -1313,9 +1347,14 @@ async def fetch_all_timeline(
     cookie_file = os.path.expanduser("~/.xueqiu_cookie_temp")
     original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
     
+    # 检查前端传递的 Cookie 是否有效（包含关键 token）
+    use_frontend_cookie = False
+    if data.cookie and 'xq_a_token' in data.cookie and '\\u' not in data.cookie:
+        use_frontend_cookie = True
+    
     try:
-        # 设置 Cookie
-        if data.cookie:
+        # 只有当前端 Cookie 有效时才替换
+        if use_frontend_cookie:
             with open(cookie_file, "w") as f:
                 f.write(data.cookie)
             if os.path.exists(original_cookie_file):
@@ -1433,6 +1472,9 @@ async def fetch_all_timeline(
                     status["analysis"] = {
                         "coreViewpoint": cached_analysis.core_viewpoint,
                         "relatedStocks": json.loads(cached_analysis.related_stocks) if cached_analysis.related_stocks else [],
+                        "positionSignals": json.loads(cached_analysis.position_signals) if cached_analysis.position_signals else [],
+                        "keyLogic": json.loads(cached_analysis.key_logic) if cached_analysis.key_logic else [],
+                        "riskWarnings": json.loads(cached_analysis.risk_warnings) if cached_analysis.risk_warnings else [],
                         "overallAttitude": cached_analysis.overall_attitude,
                         "summary": cached_analysis.summary,
                         "_cached": True
@@ -1443,6 +1485,15 @@ async def fetch_all_timeline(
                         analysis = analyze_text(status["text"], status.get("title", ""))
                         if not analysis.error:
                             # 保存到数据库
+                            # 解析原始发言时间
+                            status_created_at = None
+                            if status.get("created_at"):
+                                try:
+                                    from datetime import datetime
+                                    status_created_at = datetime.fromisoformat(status["created_at"].replace("Z", "+00:00"))
+                                except:
+                                    pass
+                            
                             saved = StatusAnalysis(
                                 status_id=status["id"],
                                 user_id=status["user_id"],
@@ -1458,7 +1509,8 @@ async def fetch_all_timeline(
                                 risk_warnings=json.dumps(analysis.risk_warnings),
                                 overall_attitude=analysis.overall_attitude,
                                 summary=analysis.summary,
-                                raw_content=status["text"][:1000]
+                                raw_content=status["text"][:1000],
+                                status_created_at=status_created_at
                             )
                             db.add(saved)
                             await db.commit()
@@ -1467,6 +1519,9 @@ async def fetch_all_timeline(
                             status["analysis"] = {
                                 "coreViewpoint": analysis.core_viewpoint,
                                 "relatedStocks": [{"name": s.name, "code": s.code, "attitude": s.attitude, "reason": s.reason} for s in analysis.related_stocks],
+                                "positionSignals": [{"operation": p.operation, "stock": p.stock, "basis": p.basis} for p in analysis.position_signals],
+                                "keyLogic": analysis.key_logic,
+                                "riskWarnings": analysis.risk_warnings,
                                 "overallAttitude": analysis.overall_attitude,
                                 "summary": analysis.summary,
                                 "_cached": False
@@ -1486,17 +1541,65 @@ async def fetch_all_timeline(
             "_cache_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        # 缓存结果
-        _daily_summary_cache[cache_key] = {
-            "data": result_data,
-            "cached_at": datetime.now()
-        }
+        # 只有当数据不为空时才缓存
+        if len(unique_statuses) > 0:
+            _daily_summary_cache[cache_key] = {
+                "data": result_data,
+                "cached_at": datetime.now()
+            }
         
         return result_data
         
     finally:
-        # 恢复原始 Cookie
-        if os.path.exists(original_cookie_file + ".bak"):
-            if os.path.exists(original_cookie_file):
-                os.remove(original_cookie_file)
-            os.rename(original_cookie_file + ".bak", original_cookie_file)
+        # 只有使用了前端 Cookie 时才恢复
+        if use_frontend_cookie:
+            if os.path.exists(original_cookie_file + ".bak"):
+                if os.path.exists(original_cookie_file):
+                    os.remove(original_cookie_file)
+                os.rename(original_cookie_file + ".bak", original_cookie_file)
+
+
+# ============ 大V信息同步 ============
+
+@router.post("/sync-vip-info")
+async def sync_vip_info(db: AsyncSession = Depends(get_db)):
+    """同步所有大V的头像和昵称"""
+    from app.services.xueqiu_service import XueqiuService
+    
+    service = XueqiuService()
+    
+    if not service.has_cookie():
+        return {"error": "Cookie 未配置"}
+    
+    # 获取所有大V
+    result = await db.execute(select(VIPUser))
+    vips = result.scalars().all()
+    
+    updated = 0
+    updates = []
+    for vip in vips:
+        try:
+            user_info = service.get_user_info(vip.xueqiu_id)
+            if user_info and user_info.screen_name:
+                old_name = vip.nickname
+                vip.nickname = user_info.screen_name
+                vip.avatar = user_info.avatar or vip.avatar
+                updated += 1
+                updates.append({
+                    "xueqiu_id": vip.xueqiu_id,
+                    "old_name": old_name,
+                    "new_name": user_info.screen_name,
+                    "avatar": user_info.avatar[:50] if user_info.avatar else None
+                })
+                print(f"更新 {vip.xueqiu_id}: {old_name} -> {user_info.screen_name}")
+        except Exception as e:
+            print(f"获取 {vip.xueqiu_id} 信息失败: {e}")
+    
+    await db.commit()
+    
+    return {
+        "total": len(vips),
+        "updated": updated,
+        "updates": updates,
+        "message": f"成功同步 {updated}/{len(vips)} 位大V信息"
+    }

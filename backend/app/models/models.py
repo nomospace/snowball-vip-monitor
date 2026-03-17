@@ -95,4 +95,5 @@ class StatusAnalysis(Base):
     overall_attitude = Column(String(20))  # 整体态度
     summary = Column(Text)  # 脱水总结
     raw_content = Column(Text)  # 原始内容
-    created_at = Column(DateTime, server_default=func.now())
+    status_created_at = Column(DateTime)  # 大V发言时间（原始时间）
+    created_at = Column(DateTime, server_default=func.now())  # 记录创建时间
