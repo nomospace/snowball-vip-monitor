@@ -141,12 +141,6 @@ interface HoldingChange {
           </div>
         </section>
 
-        <!-- ========== 核心功能入口 ========== -->
-        <a routerLink="/summary" 
-           class="block w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 rounded-xl text-center font-semibold text-lg shadow-lg hover:from-orange-600 hover:to-orange-700 transition">
-          📊 查看今日脱水摘要
-        </a>
-
         <!-- ========== 筛选栏 ========== -->
         <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
           <div class="flex flex-wrap gap-2 items-center">
