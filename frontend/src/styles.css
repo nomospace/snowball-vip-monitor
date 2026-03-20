@@ -7,77 +7,109 @@ body {
 }
 
 /* ========================================
-   移动端字体适配优化（屏幕宽度 ≤ 768px）
-   PC端完全保留原有样式，不做任何改动
+   全局字体优化（桌面端 + 移动端统一）
+   ======================================== */
+
+/* 全局基础字体优化 */
+html {
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 标题层级 */
+h1, .text-lg, .font-bold.text-lg {
+  font-size: 1.125rem !important;
+  line-height: 1.4 !important;
+}
+
+h2, .text-base, .font-semibold.text-base {
+  font-size: 1.05rem !important;
+  line-height: 1.5 !important;
+}
+
+h3, .font-medium.text-sm, .font-semibold.text-sm {
+  font-size: 0.95rem !important;
+  line-height: 1.5 !important;
+}
+
+/* 正文基础字号 */
+.text-sm {
+  font-size: 0.95rem !important;
+  line-height: 1.6 !important;
+}
+
+/* 小标签文字 */
+.text-xs {
+  font-size: 0.8rem !important;
+  line-height: 1.5 !important;
+}
+
+/* 按钮文字 */
+button {
+  font-size: 0.95rem !important;
+}
+
+/* 输入框 */
+input, textarea, select {
+  font-size: 1rem !important;
+}
+
+/* 列表项文字 */
+li {
+  font-size: inherit;
+  line-height: 1.6;
+}
+
+/* 表格文字 */
+table, th, td {
+  font-size: 0.95rem;
+}
+
+/* 卡片标题栏 */
+.font-semibold {
+  letter-spacing: 0.01em;
+}
+
+/* 富文本内容 */
+.rich-text {
+  font-size: 0.95rem !important;
+  line-height: 1.7 !important;
+  letter-spacing: 0.02em;
+}
+
+/* 避免文字溢出 */
+p, span, div {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* 统计卡片数字 */
+.text-2xl {
+  font-size: 1.5rem !important;
+}
+
+.text-lg.font-bold {
+  font-size: 1.125rem !important;
+}
+
+/* 大V卡片标题 */
+.font-medium.text-slate-800.text-sm {
+  font-size: 0.95rem !important;
+}
+
+/* 大V卡片操作按钮 */
+.flex.gap-2 > button {
+  font-size: 0.9rem !important;
+}
+
+/* ========================================
+   移动端专属优化（屏幕宽度 ≤ 768px）
    ======================================== */
 
 @media (max-width: 768px) {
-  /* 全局基础字体放大 */
+  /* 全局基础字体放大（移动端更大） */
   html {
     font-size: 17px;
-    line-height: 1.6;
-    -webkit-text-size-adjust: 100%;
-  }
-
-  /* 标题层级 */
-  h1, .text-lg, .font-bold.text-lg {
-    font-size: 1.125rem !important;
-    line-height: 1.4 !important;
-  }
-
-  h2, .text-base, .font-semibold.text-base {
-    font-size: 1.05rem !important;
-    line-height: 1.5 !important;
-  }
-
-  h3, .font-medium.text-sm, .font-semibold.text-sm {
-    font-size: 0.95rem !important;
-    line-height: 1.5 !important;
-  }
-
-  /* 正文基础字号 */
-  .text-sm {
-    font-size: 0.95rem !important;
-    line-height: 1.6 !important;
-  }
-
-  /* 小标签文字 */
-  .text-xs {
-    font-size: 0.8rem !important;
-    line-height: 1.5 !important;
-  }
-
-  /* 按钮文字 */
-  button {
-    font-size: 0.95rem !important;
-  }
-
-  /* 输入框 */
-  input, textarea, select {
-    font-size: 1rem !important;
-  }
-
-  /* 列表项文字 */
-  li {
-    font-size: inherit;
-    line-height: 1.6;
-  }
-
-  /* 表格文字 */
-  table, th, td {
-    font-size: 0.95rem;
-  }
-
-  /* 卡片标题栏 */
-  .font-semibold {
-    letter-spacing: 0.01em;
-  }
-
-  /* 富文本内容 */
-  .rich-text {
-    font-size: 0.95rem !important;
-    line-height: 1.7 !important;
-    letter-spacing: 0.02em;
   }
 
   /* 卡片内容区域增加内边距，适配放大字体 */
@@ -86,25 +118,10 @@ body {
     padding-right: 1rem;
   }
 
-  /* 避免文字溢出 */
-  p, span, div {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-
   /* 按钮最小点击区域 */
   button, a.btn {
     min-height: 44px;
     min-width: 44px;
-  }
-
-  /* 统计卡片数字 */
-  .text-2xl {
-    font-size: 1.5rem !important;
-  }
-
-  .text-lg.font-bold {
-    font-size: 1.125rem !important;
   }
 
   /* ========== 摘要页优化 ========== */
@@ -121,20 +138,10 @@ body {
     font-size: 0.9rem !important;
   }
 
-  /* 大V卡片标题 */
-  .font-medium.text-slate-800.text-sm {
-    font-size: 0.95rem !important;
-  }
-
   /* ========== VIP页优化 ========== */
   /* 搜索框 */
   input[type="text"] {
     font-size: 1rem !important;
-  }
-
-  /* 大V卡片操作按钮 */
-  .flex.gap-2 > button {
-    font-size: 0.9rem !important;
   }
 }
 
