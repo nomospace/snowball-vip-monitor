@@ -169,29 +169,38 @@ interface HoldingChange {
                     </div>
                   }
                   
-                  <!-- 分析详情（默认展开） -->
-                  @if (item.analysis) {
-                    <div class="mt-3 pt-3 border-t border-slate-100 text-sm text-slate-600">
-                      @if (item.analysis.summary) {
-                        <p class="mb-2 text-slate-700">{{ item.analysis!.summary }}</p>
-                      }
-                      @if (item.analysis.keyLogic?.length) {
-                        <div class="mb-2">
-                          <span class="font-medium text-slate-700">关键逻辑：</span>
-                          <ul class="list-disc list-inside text-xs mt-1">
-                            @for (logic of item.analysis!.keyLogic!; track $index) {
-                              <li>{{ logic }}</li>
-                            }
-                          </ul>
-                        </div>
-                      }
-                      @if (item.analysis.riskWarnings?.length) {
-                        <div class="text-amber-600">
-                          <span class="font-medium">⚠️ 风险提示：</span>
-                          <span class="text-xs">{{ item.analysis!.riskWarnings!.join('；') }}</span>
-                        </div>
-                      }
-                    </div>
+                  <!-- 原始内容区块 -->
+                  <div class="original-content">
+                    @if (item.analysis?.summary) {
+                      <p class="mb-2 text-slate-700">{{ item.analysis!.summary }}</p>
+                    }
+                  </div>
+                  
+                  <!-- 分析详情区块（视觉区分） -->
+                  @if (item.analysis; as analysis) {
+                    @if (analysis.keyLogic?.length || analysis.riskWarnings?.length) {
+                      <div class="analysis-detail">
+                        @if (analysis.keyLogic?.length) {
+                          <div class="mb-2">
+                            <div class="logic-title">
+                              <span>💡</span>
+                              <span>关键逻辑</span>
+                            </div>
+                            <ul class="logic-list">
+                              @for (logic of analysis.keyLogic!; track $index) {
+                                <li>{{ logic }}</li>
+                              }
+                            </ul>
+                          </div>
+                        }
+                        @if (analysis.riskWarnings?.length) {
+                          <div class="risk-warning">
+                            <span class="warning-title">⚠️ 风险提示：</span>
+                            <span>{{ analysis.riskWarnings!.join('；') }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
                   }
                 </div>
               }
