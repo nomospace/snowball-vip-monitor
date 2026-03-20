@@ -91,12 +91,6 @@ interface HoldingChange {
                 class="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1 text-sm focus:outline-none w-32"
                 [style.color]="'white'">
               <button 
-                (click)="clearDateFilter()"
-                class="flex items-center justify-center w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition"
-                title="清除日期筛选">
-                ✕
-              </button>
-              <button 
                 (click)="refreshTimeline()"
                 [disabled]="loading"
                 class="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg text-sm transition disabled:opacity-50">
