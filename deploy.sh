@@ -3,7 +3,7 @@
 
 set -e
 
-PROJECT_DIR="/home/admin/.openclaw/workspace/snowball-vip-monitor"
+PROJECT_DIR="/home/admin/.openclaw/workspace/xueqiu-vip-tracker"
 BUILD_TIME=$(date '+%Y-%m-%d %H:%M')
 
 echo "======================================"

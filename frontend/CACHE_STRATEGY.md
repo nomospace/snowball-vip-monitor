@@ -61,7 +61,7 @@ location = /index.html {
 ### 正常更新
 
 ```bash
-cd /home/admin/.openclaw/workspace/snowball-vip-monitor/frontend
+cd /home/admin/.openclaw/workspace/xueqiu-vip-tracker/frontend
 npm run build:version
 ```
 

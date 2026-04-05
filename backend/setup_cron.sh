@@ -1,7 +1,7 @@
 #!/bin/bash
 # 设置定时抓取任务
 
-SCRIPT_DIR="/home/admin/.openclaw/workspace/snowball-vip-monitor/backend"
+SCRIPT_DIR="/home/admin/.openclaw/workspace/xueqiu-vip-tracker/backend"
 PYTHON="$SCRIPT_DIR/venv/bin/python3"
 LOG_FILE="/tmp/snowball-crawl.log"
 

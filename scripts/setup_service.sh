@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_DIR="/home/admin/.openclaw/workspace/snowball-vip-monitor"
+PROJECT_DIR="/home/admin/.openclaw/workspace/xueqiu-vip-tracker"
 SERVICE_NAME="xueqiu-vip-tracker"
 
 echo "======================================"
