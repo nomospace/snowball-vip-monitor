@@ -313,7 +313,7 @@ export class DashboardComponent implements OnInit {
   loading = false;
   lastUpdate = '--';
   cacheTime = '';
-  buildTime = '2026-03-20 14:05';
+  buildTime = '2026-04-04 19:46';
   
   // Cookie
   cookieStatus = false;
@@ -367,8 +367,12 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
+    // 保存旧数据，以便请求失败时恢复
+    const oldTimeline = this.timeline;
+    
     this.loading = true;
-    this.timeline = [];
+    // 不清空数据，保持当前显示，等新数据到达后再替换
+    // this.timeline = [];  // 注释掉这行
     this.cacheTime = '';
     
     const cookie = localStorage.getItem('xueqiu_cookie') || '';
@@ -396,13 +400,23 @@ export class DashboardComponent implements OnInit {
       timeout(60000),
       catchError(err => {
         console.error('请求超时或失败', err);
-        return of({ statuses: [], total: 0 });
+        // 请求失败时，恢复旧数据
+        return of({ statuses: oldTimeline, total: oldTimeline.length, _error: true });
       })
     ).subscribe({
       next: (result) => {
-        // 保存原始数据，不过滤（让 filteredTimeline 处理日期过滤）
-        this.timeline = result.statuses || [];
-        this.cacheTime = result._cache_time || '';
+        console.log('API 返回:', result.total, '条数据');
+        
+        // 只有当有数据时才更新
+        if (result.statuses && result.statuses.length > 0) {
+          this.timeline = result.statuses;
+          this.cacheTime = result._cache_time || '';
+        } else if (!result._error) {
+          // 如果不是错误，且确实返回了空数据，才清空
+          this.timeline = [];
+        }
+        // 如果是错误（_error=true），保持旧数据不变
+        
         this.loading = false;
         this.updateLastTime();
         // 数据加载完成后滚动到页面顶部
@@ -411,7 +425,11 @@ export class DashboardComponent implements OnInit {
       error: (err) => {
         console.error('加载时间线失败', err);
         this.loading = false;
-        this.timeline = [];
+        // 出错时恢复旧数据
+        if (oldTimeline.length > 0) {
+          this.timeline = oldTimeline;
+          console.log('已恢复旧数据:', oldTimeline.length, '条');
+        }
       }
     });
   }
@@ -496,11 +514,36 @@ export class DashboardComponent implements OnInit {
 
   saveCookie() {
     if (this.cookieInput.trim()) {
-      localStorage.setItem('xueqiu_cookie', this.cookieInput.trim());
+      const cookie = this.cookieInput.trim();
+      localStorage.setItem('xueqiu_cookie', cookie);
       this.cookieStatus = true;
       this.cookieInput = '';
-      this.showToast('Cookie 配置成功');
-      this.loadTimeline(true);
+      this.showToast('Cookie 配置成功，正在验证...');
+      
+      // 验证 Cookie 是否有效，并永久保存到服务器
+      this.http.post<any>('/api/vip/fetch-all-timeline', {
+        vip_ids: [],
+        count: 1,
+        cookie: cookie,
+        force_refresh: true,
+        save_cookie: true  // 永久保存到服务器
+      }).pipe(
+        timeout(30000),
+        catchError(err => {
+          console.error('Cookie 验证失败', err);
+          this.showToast('Cookie 可能无效，请检查', 'error');
+          return of({ statuses: [] });
+        })
+      ).subscribe({
+        next: (result) => {
+          if (result.error) {
+            this.showToast('Cookie 无效：' + result.error, 'error');
+          } else {
+            this.showToast('Cookie 配置成功并已保存到服务器');
+            this.loadTimeline(true);
+          }
+        }
+      });
     }
   }
 

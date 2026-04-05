@@ -11,6 +11,7 @@ import os
 import json
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.models import VIPUser
 
 router = APIRouter()
@@ -547,7 +548,7 @@ async def fetch_statuses(data: FetchStatusesRequest, db: AsyncSession = Depends(
         statuses = service.get_user_statuses(data.user_id, data.status_type, data.count)
         
         # 获取 API Key
-        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+        api_key = settings.DASHSCOPE_API_KEY or ""
         
         # 批量分析所有动态
         result = []
@@ -908,7 +909,7 @@ async def analyze_content(
             }
     
     # 检查 API Key
-    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    api_key = settings.DASHSCOPE_API_KEY or ""
     if not api_key:
         # 返回默认分析结果（无 AI）
         return {
@@ -1330,6 +1331,7 @@ class FetchAllStatusesRequest(BaseModel):
     count: int = 10  # 每种类型数量
     cookie: str = ""
     force_refresh: bool = False  # 强制刷新
+    save_cookie: bool = False  # 是否永久保存 Cookie 到服务器
 
 
 @router.post("/fetch-all-timeline")
@@ -1384,10 +1386,19 @@ async def fetch_all_timeline(
     cookie_file = os.path.expanduser("~/.xueqiu_cookie_temp")
     original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
     
+    # 检查服务器 Cookie 是否有效
+    server_cookie_valid = False
+    if os.path.exists(original_cookie_file):
+        with open(original_cookie_file, "r", encoding="utf-8") as f:
+            server_cookie = f.read()
+        server_cookie_valid = 'xq_a_token' in server_cookie and 'xq_r_token' in server_cookie
+    
     # 检查前端传递的 Cookie 是否有效（包含关键 token）
     use_frontend_cookie = False
     if data.cookie and 'xq_a_token' in data.cookie and '\\u' not in data.cookie:
-        use_frontend_cookie = True
+        # 只有当前端 Cookie 有效 且 服务器 Cookie 无效时，才使用前端 Cookie
+        if not server_cookie_valid:
+            use_frontend_cookie = True
     
     try:
         # 只有当前端 Cookie 有效时才替换
@@ -1629,12 +1640,20 @@ async def fetch_all_timeline(
         return result_data
         
     finally:
-        # 只有使用了前端 Cookie 时才恢复
+        # Cookie 处理逻辑
         if use_frontend_cookie:
-            if os.path.exists(original_cookie_file + ".bak"):
-                if os.path.exists(original_cookie_file):
-                    os.remove(original_cookie_file)
-                os.rename(original_cookie_file + ".bak", original_cookie_file)
+            if data.save_cookie:
+                # 永久保存前端传递的 Cookie
+                # 删除备份文件，保留当前文件
+                if os.path.exists(original_cookie_file + ".bak"):
+                    os.remove(original_cookie_file + ".bak")
+                print(f"Cookie 已永久保存到服务器")
+            else:
+                # 恢复原有 Cookie（临时使用模式）
+                if os.path.exists(original_cookie_file + ".bak"):
+                    if os.path.exists(original_cookie_file):
+                        os.remove(original_cookie_file)
+                    os.rename(original_cookie_file + ".bak", original_cookie_file)
 
 
 class FetchTodayRequest(BaseModel):

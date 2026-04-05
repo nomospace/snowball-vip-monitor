@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { timeout, catchError, of } from 'rxjs';
 
 // 富文本处理 Pipe
 @Pipe({
@@ -265,7 +266,7 @@ export class DailySummaryComponent implements OnInit {
   globalInsight: GlobalInsight | null = null;
   loading = false;
   refreshing = false;
-  buildTime = '2026-03-17 22:55';
+  buildTime = '2026-04-04 19:46';
   
   // 筛选
   filterAttitude = 'all';
@@ -328,7 +329,16 @@ export class DailySummaryComponent implements OnInit {
 
   refreshSummary() {
     this.refreshing = true;
-    this.http.post('/api/vip/fetch-all-timeline', {}).subscribe({
+    this.http.post<any>('/api/vip/fetch-all-timeline', {
+      count: 10,
+      force_refresh: true
+    }).pipe(
+      timeout(60000),
+      catchError(err => {
+        console.error('刷新失败', err);
+        return of({ statuses: [] });
+      })
+    ).subscribe({
       next: () => {
         this.loadSummary(this.selectedDate);
         this.refreshing = false;
