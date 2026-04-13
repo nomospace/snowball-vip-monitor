@@ -313,7 +313,7 @@ export class DashboardComponent implements OnInit {
   loading = false;
   lastUpdate = '--';
   cacheTime = '';
-  buildTime = '2026-04-04 19:46';
+  buildTime = '2026-04-13 21:31';
   
   // Cookie
   cookieStatus = false;

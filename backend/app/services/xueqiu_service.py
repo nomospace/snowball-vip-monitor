@@ -163,6 +163,49 @@ class XueqiuService:
             print(f"获取用户信息失败: {e}")
             return UserInfo(user_id=str(user_id), screen_name=f"用户{user_id}")
     
+    def check_cookie_valid(self) -> dict:
+        """检查 Cookie 是否有效"""
+        result = {
+            "valid": False,
+            "error": None,
+            "user_id": None
+        }
+        
+        if not self.has_cookie():
+            result["error"] = "Cookie 未配置"
+            return result
+        
+        try:
+            # 尝试获取当前用户信息来验证 Cookie
+            user_id = self.get_current_user_id()
+            if not user_id:
+                result["error"] = "Cookie 无效：无法获取用户ID"
+                return result
+            
+            # 尝试获取用户信息
+            url = f"{XUEQIU_API}/v4/user/show.json?user_id={user_id}"
+            resp = self.session.get(url, timeout=15)
+            
+            if resp.status_code == 403:
+                result["error"] = "Cookie 已失效（403 Forbidden），请重新获取"
+                return result
+            
+            if resp.status_code == 200 and 'json' in resp.headers.get('Content-Type', ''):
+                result["valid"] = True
+                result["user_id"] = user_id
+            else:
+                # 检查是否返回 HTML（被 WAF 拦截）
+                content = resp.text[:200] if resp.text else ''
+                if 'aliyun_waf' in content or '<html' in content.lower():
+                    result["error"] = "Cookie 已失效或被WAF拦截，请重新获取"
+                else:
+                    result["error"] = f"请求失败: {resp.status_code}"
+            
+        except Exception as e:
+            result["error"] = f"检查失败: {str(e)}"
+        
+        return result
+
     def get_user_statuses(
         self,
         user_id: str,
@@ -170,7 +213,11 @@ class XueqiuService:
         count: int = 20,
         page: int = 1
     ) -> List[Status]:
-        """获取用户动态"""
+        """获取用户动态
+        
+        Returns:
+            tuple: (动态列表, 错误信息)
+        """
         self._random_delay()
         
         try:
@@ -184,6 +231,14 @@ class XueqiuService:
             }
             
             resp = self.session.get(url, params=params, timeout=15)
+            
+            # 检查 Cookie 失效
+            if resp.status_code == 403:
+                return []  # Cookie 已失效，请重新获取雪球 Cookie"
+            
+            # 检查 Cookie 失效
+            if resp.status_code == 403:
+                return []  # Cookie 已失效，请重新获取雪球 Cookie"
             
             if resp.status_code == 200 and 'json' in resp.headers.get('Content-Type', ''):
                 data = resp.json()
@@ -211,7 +266,12 @@ class XueqiuService:
                 
                 return statuses
             
-            return []
+            # 检查是否是 HTML 响应（WAF 拦截）
+            content = resp.text[:200] if resp.text else ''
+            if 'aliyun_waf' in content or '<html' in content.lower():
+                return []  # Cookie 已失效或被WAF拦截"
+            
+            return []  # 请求失败 {resp.status_code}"
             
         except Exception as e:
             print(f"获取用户动态失败: {e}")
