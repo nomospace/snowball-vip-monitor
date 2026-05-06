@@ -266,7 +266,7 @@ export class DailySummaryComponent implements OnInit {
   globalInsight: GlobalInsight | null = null;
   loading = false;
   refreshing = false;
-  buildTime = '2026-04-04 19:46';
+  buildTime = '2026-04-30 18:36';
   
   // 筛选
   filterAttitude = 'all';
@@ -294,6 +294,12 @@ export class DailySummaryComponent implements OnInit {
 
   loadSummary(date: string) {
     this.loading = true;
+    
+    // 验证日期格式，避免 Invalid Date
+    if (!date || date.trim() === '') {
+      date = new Date().toISOString().split('T')[0];
+    }
+    
     this.selectedDate = date;
     
     this.http.get<DailySummary>(`/api/vip/daily-summary?date=${date}`).subscribe({

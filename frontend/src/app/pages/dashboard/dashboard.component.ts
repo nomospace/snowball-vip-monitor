@@ -313,7 +313,7 @@ export class DashboardComponent implements OnInit {
   loading = false;
   lastUpdate = '--';
   cacheTime = '';
-  buildTime = '2026-04-13 21:31';
+  buildTime = '2026-04-30 18:36';
   
   // Cookie
   cookieStatus = false;
@@ -447,8 +447,9 @@ export class DashboardComponent implements OnInit {
   }
 
   clearDateFilter() {
-    this.selectedDate = '';
-    // 清除日期筛选后重新加载数据
+    // 设置为今天而不是空字符串，避免日期选择器显示 "Invalid Date"
+    this.selectedDate = new Date().toISOString().split('T')[0];
+    // 清除日期筛选后重新加载数据（获取全部日期的数据）
     this.loadTimeline();
   }
 

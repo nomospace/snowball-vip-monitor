@@ -1386,18 +1386,40 @@ async def fetch_all_timeline(
     cookie_file = os.path.expanduser("~/.xueqiu_cookie_temp")
     original_cookie_file = os.path.expanduser("~/.xueqiu_cookie")
     
-    # 检查服务器 Cookie 是否有效
+    # 检查服务器 Cookie 是否有效（实际 API 测试）
     server_cookie_valid = False
     if os.path.exists(original_cookie_file):
         with open(original_cookie_file, "r", encoding="utf-8") as f:
             server_cookie = f.read()
-        server_cookie_valid = 'xq_a_token' in server_cookie and 'xq_r_token' in server_cookie
+        # 先检查字段是否存在
+        if 'xq_a_token' in server_cookie and 'u' in server_cookie:
+            # 实际测试 Cookie 是否有效（调用一次 API）
+            try:
+                import requests
+                test_cookies = {}
+                for item in server_cookie.split(';'):
+                    if '=' in item:
+                        k, v = item.split('=', 1)
+                        test_cookies[k.strip()] = v.strip()
+                headers = {'User-Agent': 'Xueqiu iPhone 14.17', 'Accept': 'application/json'}
+                test_url = f"https://api.xueqiu.com/v4/user/show.json?user_id={test_cookies.get('u', '4480406461')}"
+                test_resp = requests.get(test_url, headers=headers, cookies=test_cookies, timeout=10)
+                if test_resp.status_code == 200 and 'json' in test_resp.headers.get('Content-Type', ''):
+                    server_cookie_valid = True
+                elif test_resp.status_code == 403:
+                    print("服务器 Cookie 已失效（403 Forbidden）")
+                    server_cookie_valid = False
+            except Exception as e:
+                print(f"服务器 Cookie 测试失败: {e}")
+                server_cookie_valid = False
     
     # 检查前端传递的 Cookie 是否有效（包含关键 token）
     use_frontend_cookie = False
     if data.cookie and 'xq_a_token' in data.cookie and '\\u' not in data.cookie:
-        # 只有当前端 Cookie 有效 且 服务器 Cookie 无效时，才使用前端 Cookie
-        if not server_cookie_valid:
+        # 当前端 Cookie 有效时：
+        # - 如果服务器 Cookie 无效 → 自动使用并保存前端 Cookie
+        # - 如果服务器 Cookie 有效 → 只有 save_cookie=True 时才替换
+        if not server_cookie_valid or data.save_cookie:
             use_frontend_cookie = True
     
     try:
@@ -1640,16 +1662,17 @@ async def fetch_all_timeline(
         return result_data
         
     finally:
-        # Cookie 处理逻辑
+        # Cookie 处理逻辑（优化：服务器 Cookie 失效时自动保存前端 Cookie）
         if use_frontend_cookie:
-            if data.save_cookie:
+            # 如果服务器 Cookie 失效 → 自动保存前端 Cookie（不再恢复旧 Cookie）
+            # 如果服务器 Cookie 有效 → 只有 save_cookie=True 才替换，否则恢复
+            if not server_cookie_valid or data.save_cookie:
                 # 永久保存前端传递的 Cookie
-                # 删除备份文件，保留当前文件
                 if os.path.exists(original_cookie_file + ".bak"):
                     os.remove(original_cookie_file + ".bak")
-                print(f"Cookie 已永久保存到服务器")
+                print(f"✅ Cookie 已自动保存到服务器（{('替换' if server_cookie_valid else '更新失效Cookie')})")
             else:
-                # 恢复原有 Cookie（临时使用模式）
+                # 服务器 Cookie 有效且用户没有明确要求保存 → 恢复原有 Cookie
                 if os.path.exists(original_cookie_file + ".bak"):
                     if os.path.exists(original_cookie_file):
                         os.remove(original_cookie_file)
